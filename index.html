@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>网络诊断工具</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            padding-bottom: 80px;
+        }
+
+        .header {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #00d9ff;
+        }
+
+        .header .subtitle {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .container {
+            padding: 15px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .section {
+            background: rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #00d9ff;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title .icon {
+            font-size: 20px;
+        }
+
+        .input-group {
+            margin-bottom: 12px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            color: #aaa;
+            margin-bottom: 6px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            border-color: #00d9ff;
+        }
+
+        .input-group input::placeholder {
+            color: #666;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            background: linear-gradient(135deg, #00d9ff 0%, #0099cc 100%);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+
+        .btn:disabled {
+            background: #444;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+            flex: 0 0 60px;
+            display: none;
+        }
+
+        .btn-stop.active {
+            display: block;
+        }
+
+        .result-box {
+            background: rgba(0,0,0,0.4);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .result-box.success { border-left: 3px solid #00ff88; }
+        .result-box.error { border-left: 3px solid #ff4444; }
+        .result-box.info { border-left: 3px solid #00d9ff; }
+        .result-box.warning { border-left: 3px solid #ffaa00; }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-online { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
+        .status-offline { background: #ff4444; box-shadow: 0 0 6px #ff4444; }
+        .status-checking { background: #ffaa00; box-shadow: 0 0 6px #ffaa00; animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .quick-btn {
+            padding: 12px 8px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .quick-btn:active {
+            background: rgba(0,217,255,0.2);
+        }
+
+        .quick-btn .icon {
+            font-size: 24px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .tabs {
+            display: flex;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 4px;
+            margin-bottom: 15px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: #00d9ff;
+            color: #000;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #fff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: rgba(0,217,255,0.2);
+            border-radius: 10px;
+            font-size: 11px;
+            color: #00d9ff;
+        }
+
+        .info-card {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .info-card:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #888;
+            font-size: 13px;
+        }
+
+        .info-value {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .history-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .history-item .time {
+            color: #666;
+            font-size: 11px;
+        }
+
+        .timeout-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            background: rgba(255,170,0,0.2);
+            border-radius: 6px;
+            font-size: 10px;
+            color: #ffaa00;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>网络诊断工具</h1>
+        <div class="subtitle">Network Diagnostic Tool v3.0 <span style="cursor:pointer;margin-left:10px" onclick="setApiServer()">⚙️</span></div>
+    </div>
+
+    <div class="container">
+        <div class="quick-actions">
+            <div class="quick-btn" onclick="showTab('ping')">
+                <span class="icon">📡</span>
+                Ping
+            </div>
+            <div class="quick-btn" onclick="showTab('traceroute')">
+                <span class="icon">🛤️</span>
+                路由
+            </div>
+            <div class="quick-btn" onclick="showTab('mtr')">
+                <span class="icon">📊</span>
+                MTR
+            </div>
+            <div class="quick-btn" onclick="showTab('dns')">
+                <span class="icon">🔍</span>
+                DNS
+            </div>
+            <div class="quick-btn" onclick="showTab('http')">
+                <span class="icon">🌐</span>
+                HTTP
+            </div>
+            <div class="quick-btn" onclick="showTab('port')">
+                <span class="icon">🔌</span>
+                端口
+            </div>
+            <div class="quick-btn" onclick="showTab('info')">
+                <span class="icon">📱</span>
+                本机
+            </div>
+            <div class="quick-btn" onclick="showTab('batch')">
+                <span class="icon">📋</span>
+                批量
+            </div>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="ping" onclick="showTab('ping')">Ping</div>
+            <div class="tab" data-tab="traceroute" onclick="showTab('traceroute')">路由</div>
+            <div class="tab" data-tab="mtr" onclick="showTab('mtr')">MTR</div>
+            <div class="tab" data-tab="dns" onclick="showTab('dns')">DNS</div>
+            <div class="tab" data-tab="http" onclick="showTab('http')">HTTP</div>
+            <div class="tab" data-tab="info" onclick="showTab('info')">本机</div>
+        </div>
+
+        <!-- Ping检测 -->
+        <div id="ping-content" class="tab-content active">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">📡</span>
+                    Ping 连通性检测
+                    <span class="timeout-badge">超时 30s</span>
+                </div>
+                <div class="input-group">
+                    <label>主机名或IP地址</label>
+                    <input type="text" id="ping-host" placeholder="例如: baidu.com 或 8.8.8.8" value="baidu.com">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="ping-start-btn" onclick="doPing()">开始检测</button>
+                    <button class="btn btn-stop" id="ping-stop-btn" onclick="stopTask('ping')">停止</button>
+                </div>
+                <div id="ping-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- Traceroute路由跟踪 -->
+        <div id="traceroute-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">🛤️</span>
+                    Traceroute 路由跟踪
+                    <span class="timeout-badge">超时 30s</span>
+                </div>
+                <div class="input-group">
+                    <label>主机名或IP地址</label>
+                    <input type="text" id="traceroute-host" placeholder="例如: baidu.com 或 8.8.8.8" value="baidu.com">
+                </div>
+                <div class="input-group">
+                    <label>最大跳数</label>
+                    <input type="number" id="traceroute-maxhops" placeholder="默认 30" value="30" min="1" max="64">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="traceroute-start-btn" onclick="doTraceroute()">开始跟踪</button>
+                    <button class="btn btn-stop" id="traceroute-stop-btn" onclick="stopTask('traceroute')">停止</button>
+                </div>
+                <div id="traceroute-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- MTR检测 -->
+        <div id="mtr-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">📊</span>
+                    MTR 网络诊断
+                    <span class="timeout-badge">超时 60s</span>
+                </div>
+                <div class="input-group">
+                    <label>主机名或IP地址</label>
+                    <input type="text" id="mtr-host" placeholder="例如: baidu.com 或 8.8.8.8" value="baidu.com">
+                </div>
+                <div class="input-group">
+                    <label>检测次数</label>
+                    <input type="number" id="mtr-count" placeholder="默认 10" value="10" min="1" max="100">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="mtr-start-btn" onclick="doMtr()">开始诊断</button>
+                    <button class="btn btn-stop" id="mtr-stop-btn" onclick="stopTask('mtr')">停止</button>
+                </div>
+                <div id="mtr-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- DNS解析 -->
+        <div id="dns-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">🔍</span>
+                    DNS 域名解析
+                    <span class="timeout-badge">超时 30s</span>
+                </div>
+                <div class="input-group">
+                    <label>域名</label>
+                    <input type="text" id="dns-host" placeholder="例如: google.com" value="google.com">
+                </div>
+                <div class="input-group">
+                    <label>DNS服务器</label>
+                    <select id="dns-server" style="width:100%;padding:12px 15px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:16px;outline:none;">
+                        <option value="114.114.114.114">114 DNS (114.114.114.114)</option>
+                        <option value="223.5.5.5">阿里 DNS (223.5.5.5)</option>
+                        <option value="119.29.29.29">腾讯 DNS (119.29.29.29)</option>
+                        <option value="180.76.76.76">百度 DNS (180.76.76.76)</option>
+                        <option value="8.8.8.8">Google DNS (8.8.8.8)</option>
+                        <option value="1.1.1.1">Cloudflare DNS (1.1.1.1)</option>
+                    </select>
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="dns-start-btn" onclick="doDns()">解析域名</button>
+                    <button class="btn btn-stop" id="dns-stop-btn" onclick="stopTask('dns')">停止</button>
+                </div>
+                <div id="dns-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- HTTP检测 -->
+        <div id="http-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">🌐</span>
+                    HTTP/HTTPS 网站检测
+                    <span class="timeout-badge">超时 30s</span>
+                </div>
+                <div class="input-group">
+                    <label>网站URL</label>
+                    <input type="text" id="http-url" placeholder="例如: https://www.baidu.com" value="https://www.baidu.com">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="http-start-btn" onclick="doHttp()">检测网站</button>
+                    <button class="btn btn-stop" id="http-stop-btn" onclick="stopTask('http')">停止</button>
+                </div>
+                <div id="http-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- 端口检测 -->
+        <div id="port-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">🔌</span>
+                    端口状态检测
+                    <span class="timeout-badge">无全局超时</span>
+                </div>
+                <div class="input-group">
+                    <label>主机名或IP</label>
+                    <input type="text" id="port-host" placeholder="例如: 192.168.1.1" value="baidu.com">
+                </div>
+                <div class="input-group">
+                    <label>端口号（支持范围，如 1-1000）</label>
+                    <input type="text" id="port-ports" placeholder="支持: 80,443 或 1-1000 或 80,443,1-100" value="80,443,22,3306">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="port-start-btn" onclick="doPortCheck()">检测端口</button>
+                    <button class="btn btn-stop" id="port-stop-btn" onclick="stopTask('port')">停止</button>
+                </div>
+                <div id="port-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- 本机信息 -->
+        <div id="info-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">📱</span>
+                    本机网络信息
+                </div>
+                <div id="local-info">
+                    <div class="info-card">
+                        <span class="info-label">公网IP</span>
+                        <span class="info-value" id="public-ip">检测中...</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label">网络类型</span>
+                        <span class="info-value" id="net-type">检测中...</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label">User Agent</span>
+                        <span class="info-value" id="user-agent" style="font-size:11px;word-break:break-all">-</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label">屏幕分辨率</span>
+                        <span class="info-value" id="screen-res">-</span>
+                    </div>
+                    <div class="info-card">
+                        <span class="info-label">设备像素比</span>
+                        <span class="info-value" id="pixel-ratio">-</span>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="refreshInfo()" style="margin-top:15px">
+                    刷新信息
+                </button>
+            </div>
+        </div>
+
+        <!-- 批量检测 -->
+        <div id="batch-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">📋</span>
+                    批量连通性检测
+                    <span class="timeout-badge">超时 30s</span>
+                </div>
+                <div class="input-group">
+                    <label>主机列表（每行一个）</label>
+                    <textarea id="batch-hosts" style="width:100%;height:120px;padding:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:14px;resize:none;outline:none;" placeholder="baidu.com&#10;google.com&#10;github.com">baidu.com
+google.com
+github.com
+qq.com</textarea>
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="batch-start-btn" onclick="doBatchCheck()">批量检测</button>
+                    <button class="btn btn-stop" id="batch-stop-btn" onclick="stopTask('batch')">停止</button>
+                </div>
+                <div id="batch-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- 历史记录 -->
+        <div class="section">
+            <div class="section-title">
+                <span class="icon">📜</span>
+                检测历史
+                <span class="badge" id="history-count">0</span>
+            </div>
+            <div id="history-list">
+                <div style="text-align:center;color:#666;padding:20px">暂无记录</div>
+            </div>
+            <button class="btn btn-secondary" onclick="clearHistory()" style="margin-top:10px">
+                清空历史
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const TIMEOUT = 30000; // 30秒超时
+        
+        // 自动检测API基础路径
+        // PC端：自动从当前URL获取路径前缀
+        // APK：使用用户配置的服务器地址
+        function getApiBase() {
+            const saved = localStorage.getItem('apiServer');
+            if (saved) {
+                // 直接返回保存的地址，不做协议转换
+                return saved.replace(/\/$/, '');
+            }
+            
+            // 检测是否为file协议（APK环境）
+            if (window.location.protocol === 'file:') {
+                // APK默认API地址
+                return 'https://tencent.markli.cn/networks';
+            }
+            
+            // PC端：获取当前页面的路径前缀
+            // 例如：https://tencent.markli.cn/network/ -> https://tencent.markli.cn/network
+            const path = window.location.pathname;
+            // 移除末尾的 index.html 或 /
+            const basePath = path.replace(/(index\.html)?\/?$/, '');
+            return window.location.origin + basePath.replace(/\/$/, '');
+        }
+        
+        // 检测HTTPS是否可用
+        async function checkHttpsAvailable(url) {
+            try {
+                const httpsUrl = url.replace(/^http:\/\//, 'https://');
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 5000);
+                const response = await fetch(httpsUrl + '/health', {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                clearTimeout(timeout);
+                return response.ok;
+            } catch (e) {
+                return false;
+            }
+        }
+        
+        // 检测HTTP是否可用
+        async function checkHttpAvailable(url) {
+            try {
+                const httpUrl = url.replace(/^https:\/\//, 'http://');
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 5000);
+                const response = await fetch(httpUrl + '/health', {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                clearTimeout(timeout);
+                return response.ok;
+            } catch (e) {
+                return false;
+            }
+        }
+        
+        const API_SERVER = getApiBase();
+        let history = JSON.parse(localStorage.getItem('netDiagHistory') || '[]');
+        let abortControllers = {};
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+            document.getElementById(`${tabName}-content`)?.classList.add('active');
+        }
+
+        function addHistory(type, target, result) {
+            const item = {
+                type,
+                target,
+                result: result.substring(0, 100),
+                time: new Date().toLocaleString('zh-CN')
+            };
+            history.unshift(item);
+            if (history.length > 20) history.pop();
+            localStorage.setItem('netDiagHistory', JSON.stringify(history));
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            document.getElementById('history-count').textContent = history.length;
+            if (history.length === 0) {
+                list.innerHTML = '<div style="text-align:center;color:#666;padding:20px">暂无记录</div>';
+                return;
+            }
+            list.innerHTML = history.map(h => `
+                <div class="history-item">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                        <span style="color:#00d9ff">${h.type}</span>
+                        <span class="time">${h.time}</span>
+                    </div>
+                    <div style="color:#fff">${h.target}</div>
+                    <div style="color:#888;margin-top:4px;font-size:12px">${h.result}</div>
+                </div>
+            `).join('');
+        }
+
+        function clearHistory() {
+            history = [];
+            localStorage.removeItem('netDiagHistory');
+            renderHistory();
+        }
+
+        function startTask(name) {
+            if (abortControllers[name]) {
+                abortControllers[name].abort();
+            }
+            abortControllers[name] = new AbortController();
+            document.getElementById(`${name}-start-btn`).disabled = true;
+            document.getElementById(`${name}-stop-btn`).classList.add('active');
+        }
+
+        function stopTask(name) {
+            if (abortControllers[name]) {
+                abortControllers[name].abort();
+                abortControllers[name] = null;
+            }
+            document.getElementById(`${name}-start-btn`).disabled = false;
+            document.getElementById(`${name}-stop-btn`).classList.remove('active');
+            const resultBox = document.getElementById(`${name}-result`);
+            if (resultBox.style.display !== 'none') {
+                resultBox.className = 'result-box warning';
+                resultBox.innerHTML = '⚠ 任务已手动停止';
+            }
+        }
+
+        function endTask(name) {
+            abortControllers[name] = null;
+            document.getElementById(`${name}-start-btn`).disabled = false;
+            document.getElementById(`${name}-stop-btn`).classList.remove('active');
+        }
+
+        // 解析端口范围，支持 80,443,1-1000,8080 格式
+        function parsePorts(input) {
+            const ports = [];
+            const parts = input.split(',');
+            for (const part of parts) {
+                const trimmed = part.trim();
+                if (trimmed.includes('-')) {
+                    const range = trimmed.split('-').map(p => parseInt(p.trim()));
+                    if (range.length === 2 && !isNaN(range[0]) && !isNaN(range[1])) {
+                        const start = Math.min(range[0], range[1]);
+                        const end = Math.max(range[0], range[1]);
+                        for (let i = start; i <= end && i <= 65535; i++) {
+                            if (i > 0 && !ports.includes(i)) ports.push(i);
+                        }
+                    }
+                } else {
+                    const port = parseInt(trimmed);
+                    if (!isNaN(port) && port > 0 && port <= 65535 && !ports.includes(port)) {
+                        ports.push(port);
+                    }
+                }
+            }
+            return ports.sort((a, b) => a - b);
+        }
+
+        // ICMP Ping检测 - 通过后端API
+        async function doPing() {
+            const host = document.getElementById('ping-host').value.trim();
+            if (!host) return alert('请输入主机名或IP');
+
+            startTask('ping');
+            const resultBox = document.getElementById('ping-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>正在检测...';
+
+            const controller = abortControllers['ping'];
+            
+            try {
+                const url = `${API_SERVER}/api/ping`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, count: 4, timeout: 10 }),
+                    signal: controller.signal
+                });
+                
+                // 检查响应状态
+                if (!response.ok) {
+                    throw new Error(`服务器返回 ${response.status}: ${response.statusText}`);
+                }
+                
+                // 检查内容类型
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`API返回了非JSON响应: ${text.substring(0, 100)}`);
+                }
+                
+                const data = await response.json();
+                
+                if (controller.signal.aborted) {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ 检测已取消`;
+                    addHistory('Ping', host, '已取消');
+                } else if (data.success) {
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = `✓ 主机可达 (ICMP)
+                    
+主机: ${host}
+IP地址: ${data.ip || '已解析'}
+发送/接收: ${data.packets_sent}/${data.packets_received} 包
+丢包率: ${data.packet_loss}%
+延迟: ${data.avg_rtt.toFixed(1)}ms (最小: ${data.min_rtt.toFixed(1)}ms / 最大: ${data.max_rtt.toFixed(1)}ms)
+状态: 在线`;
+                    addHistory('Ping', host, `在线 (${data.avg_rtt.toFixed(1)}ms)`);
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 主机不可达
+                    
+主机: ${host}
+错误: ${data.error || '无响应'}
+丢包率: ${data.packet_loss || 100}%
+状态: 离线或不可达`;
+                    addHistory('Ping', host, '不可达');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ 检测已取消`;
+                    addHistory('Ping', host, '已取消');
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 请求失败
+                    
+主机: ${host}
+错误: ${e.message}
+API地址: ${API_SERVER}/api/ping
+请检查API服务器配置是否正确`;
+                    addHistory('Ping', host, '请求失败');
+                }
+            }
+            endTask('ping');
+        }
+
+        // DNS解析 - 通过后端API
+        async function doDns() {
+            const domain = document.getElementById('dns-host').value.trim();
+            const dnsServer = document.getElementById('dns-server').value;
+            if (!domain) return alert('请输入域名');
+
+            startTask('dns');
+            const resultBox = document.getElementById('dns-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>正在解析...';
+
+            const controller = abortControllers['dns'];
+            const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+
+            try {
+                const url = `${API_SERVER}/api/dns`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domain, dns_server: dnsServer, type: 'A' }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`服务器返回 ${response.status}: ${response.statusText}`);
+                }
+                
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`API返回了非JSON响应: ${text.substring(0, 100)}`);
+                }
+                
+                const data = await response.json();
+
+                if (controller.signal.aborted) {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ DNS解析已取消`;
+                    addHistory('DNS', domain, '已取消');
+                } else if (data.success && data.records.length > 0) {
+                    resultBox.className = 'result-box success';
+                    let result = `✓ 解析成功
+
+域名: ${domain}
+DNS服务器: ${dnsServer}
+解析结果:`;
+                    data.records.forEach((record, i) => {
+                        result += `\n  → ${record}`;
+                    });
+                    resultBox.innerHTML = result;
+                    addHistory('DNS', domain, `IP: ${data.records[0]}`);
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 解析失败
+
+域名: ${domain}
+DNS服务器: ${dnsServer}
+错误: ${data.error || '未找到解析记录'}
+状态: 解析失败`;
+                    addHistory('DNS', domain, '解析失败');
+                }
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ DNS解析已取消`;
+                    addHistory('DNS', domain, '已取消');
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 请求失败
+
+域名: ${domain}
+错误: ${e.message}
+请检查API服务器是否启动: ${API_SERVER}`;
+                    addHistory('DNS', domain, '请求失败');
+                }
+            }
+            endTask('dns');
+        }
+
+        // HTTP检测
+        async function doHttp() {
+            let url = document.getElementById('http-url').value.trim();
+            if (!url) return alert('请输入URL');
+            if (!url.startsWith('http')) url = 'https://' + url;
+
+            startTask('http');
+            const resultBox = document.getElementById('http-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>正在检测...';
+
+            const controller = abortControllers['http'];
+            
+            const urlsToTry = [url];
+            if (url.startsWith('https://')) {
+                urlsToTry.push(url.replace('https://', 'http://'));
+            }
+            
+            let success = false;
+            let latency = 0;
+            let finalUrl = '';
+            let lastError = null;
+
+            for (const tryUrl of urlsToTry) {
+                if (controller.signal.aborted) break;
+                
+                try {
+                    const fetchController = new AbortController();
+                    const fetchTimeout = setTimeout(() => fetchController.abort(), 10000);
+                    const start = performance.now();
+                    
+                    await fetch(tryUrl, {
+                        mode: 'no-cors',
+                        signal: controller.signal.aborted ? controller.signal : fetchController.signal
+                    });
+                    clearTimeout(fetchTimeout);
+                    
+                    latency = Math.round(performance.now() - start);
+                    finalUrl = tryUrl;
+                    success = true;
+                    break;
+                } catch (e) {
+                    lastError = e;
+                    if (e.name === 'AbortError' && controller.signal.aborted) break;
+                }
+            }
+
+            const hostname = new URL(url).hostname;
+
+            if (controller.signal.aborted) {
+                resultBox.className = 'result-box warning';
+                resultBox.innerHTML = `⚠ 检测已取消`;
+                addHistory('HTTP', url, '已取消');
+            } else if (success) {
+                resultBox.className = 'result-box success';
+                resultBox.innerHTML = `✓ 网站可达
+
+URL: ${finalUrl}
+主机: ${hostname}
+响应时间: ${latency}ms
+状态: 正常`;
+                addHistory('HTTP', url, `正常 (${latency}ms)`);
+            } else {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `✗ 检测失败
+
+URL: ${url}
+错误: ${lastError?.message || '未知错误'}
+状态: 不可达`;
+                addHistory('HTTP', url, '不可达');
+            }
+            endTask('http');
+        }
+
+        // 格式化延迟显示
+        function formatRtt(rttArray) {
+            const validRtts = rttArray.filter(r => typeof r === 'number');
+            if (validRtts.length === 0) return '*';
+            const avg = (validRtts.reduce((a, b) => a + b, 0) / validRtts.length).toFixed(1);
+            return avg + 'ms';
+        }
+
+        // 更新 Traceroute 显示
+        function updateTracerouteDisplay(resultBox, hops, host, header) {
+            let result = `<span class="loading"></span>正在跟踪路由到 ${host}...\n\n`;
+            result += header;
+            for (const h of hops) {
+                const hn = h.hop.toString().padEnd(6);
+                const hi = (h.ip || '*').padEnd(18);
+                const hr = formatRtt(h.rtt).padEnd(12);
+                const hh = h.hostname || '-';
+                result += `${hn}${hi}${hr}${hh}\n`;
+            }
+            resultBox.innerHTML = result;
+        }
+
+        // Traceroute路由跟踪 - 实时流式输出
+        async function doTraceroute() {
+            const host = document.getElementById('traceroute-host').value.trim();
+            const maxHops = document.getElementById('traceroute-maxhops').value || 30;
+            if (!host) return alert('请输入主机名或IP');
+
+            startTask('traceroute');
+            const resultBox = document.getElementById('traceroute-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>正在跟踪路由...\n\n';
+            
+            let hops = [];
+            let header = `${'跳数'.padEnd(6)}${'IP地址'.padEnd(18)}${'延迟'.padEnd(12)}主机名\n` + '-'.repeat(60) + '\n';
+            
+            const controller = abortControllers['traceroute'];
+            
+            try {
+                const url = `${API_SERVER}/api/traceroute`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, max_hops: parseInt(maxHops), timeout: 30 }),
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`服务器返回 ${response.status}: ${response.statusText}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                const processLine = (line) => {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const event = JSON.parse(line.substring(6));
+                            
+                            if (event.type === 'start') {
+                                resultBox.innerHTML = `<span class="loading"></span>正在跟踪路由到 ${event.host} (${event.target_ip})...\n\n` + header;
+                            } else if (event.type === 'hop') {
+                                hops.push(event.data);
+                                updateTracerouteDisplay(resultBox, hops, host, header);
+                            } else if (event.type === 'done') {
+                                let finalResult = `目标: ${host}\n总跳数: ${hops.length}\n\n` + header;
+                                for (const h of hops) {
+                                    const hn = h.hop.toString().padEnd(6);
+                                    const hi = (h.ip || '*').padEnd(18);
+                                    const hr = formatRtt(h.rtt).padEnd(12);
+                                    const hh = h.hostname || '-';
+                                    finalResult += `${hn}${hi}${hr}${hh}\n`;
+                                }
+                                resultBox.className = 'result-box success';
+                                resultBox.innerHTML = finalResult;
+                                addHistory('路由跟踪', host, `${hops.length} 跳`);
+                            } else if (event.type === 'error') {
+                                resultBox.className = 'result-box error';
+                                resultBox.innerHTML = `✗ 路由跟踪失败\n\n错误: ${event.error}`;
+                                addHistory('路由跟踪', host, '失败');
+                            }
+                        } catch (e) {
+                            // 忽略解析错误
+                        }
+                    }
+                };
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done || controller.signal.aborted) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    
+                    for (const line of lines) {
+                        processLine(line);
+                    }
+                    
+                    // 让浏览器有机会渲染
+                    await new Promise(r => setTimeout(r, 0));
+                }
+                
+                if (controller.signal.aborted) {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ 路由跟踪已取消 (已完成 ${hops.length} 跳)`;
+                    addHistory('路由跟踪', host, '已取消');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ 路由跟踪已取消 (已完成 ${hops.length} 跳)`;
+                    addHistory('路由跟踪', host, '已取消');
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 请求失败
+
+目标: ${host}
+错误: ${e.message}
+API地址: ${API_SERVER}/api/traceroute
+请检查API服务器配置是否正确`;
+                    addHistory('路由跟踪', host, '请求失败');
+                }
+            }
+            endTask('traceroute');
+        }
+
+        // MTR网络诊断 - 通过后端API
+        async function doMtr() {
+            const host = document.getElementById('mtr-host').value.trim();
+            const count = document.getElementById('mtr-count').value || 10;
+            if (!host) return alert('请输入主机名或IP');
+
+            startTask('mtr');
+            const resultBox = document.getElementById('mtr-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>正在进行MTR诊断，这可能需要一些时间...';
+
+            const controller = abortControllers['mtr'];
+            
+            try {
+                const url = `${API_SERVER}/api/mtr`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, count: parseInt(count), timeout: 60 }),
+                    signal: controller.signal
+                });
+                
+                // 检查响应状态
+                if (!response.ok) {
+                    throw new Error(`服务器返回 ${response.status}: ${response.statusText}`);
+                }
+                
+                // 检查内容类型
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`API返回了非JSON响应: ${text.substring(0, 100)}`);
+                }
+                
+                const data = await response.json();
+                
+                if (controller.signal.aborted) {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ MTR诊断已取消`;
+                    addHistory('MTR', host, '已取消');
+                } else if (data.success && data.hops && data.hops.length > 0) {
+                    let result = `目标: ${host}\n检测次数: ${data.count}\n总跳数: ${data.total_hops}\n\n`;
+                    result += `${'跳数'.padEnd(6)}${'丢包%'.padEnd(8)}${'发送'.padEnd(6)}${'平均'.padEnd(8)}${'最好'.padEnd(8)}${'最差'.padEnd(8)}${'IP地址'.padEnd(18)}主机名\n`;
+                    result += '-'.repeat(85) + '\n';
+                    
+                    for (const hop of data.hops) {
+                        const hopNum = hop.hop.toString().padEnd(6);
+                        const loss = `${hop.lost_percent}%`.padEnd(8);
+                        const sent = hop.sent.toString().padEnd(6);
+                        const avg = hop.avg ? `${hop.avg.toFixed(1)}ms`.padEnd(8) : '-'.padEnd(8);
+                        const best = hop.best ? `${hop.best.toFixed(1)}ms`.padEnd(8) : '-'.padEnd(8);
+                        const worst = hop.worst ? `${hop.worst.toFixed(1)}ms`.padEnd(8) : '-'.padEnd(8);
+                        const ip = (hop.ip || '*').padEnd(18);
+                        const hostname = hop.hostname || '-';
+                        result += `${hopNum}${loss}${sent}${avg}${best}${worst}${ip}${hostname}\n`;
+                    }
+                    
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = result;
+                    addHistory('MTR', host, `${data.total_hops} 跳`);
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ MTR诊断失败
+
+目标: ${host}
+错误: ${data.error || '无法执行MTR诊断'}
+状态: 失败`;
+                    addHistory('MTR', host, '失败');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ MTR诊断已取消`;
+                    addHistory('MTR', host, '已取消');
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 请求失败
+
+目标: ${host}
+错误: ${e.message}
+API地址: ${API_SERVER}/api/mtr
+请检查API服务器配置是否正确`;
+                    addHistory('MTR', host, '请求失败');
+                }
+            }
+            endTask('mtr');
+        }
+
+        // TCP端口检测 - 通过后端API
+        async function doPortCheck() {
+            const host = document.getElementById('port-host').value.trim();
+            const portsInput = document.getElementById('port-ports').value.trim();
+            if (!host || !portsInput) return alert('请输入主机和端口');
+
+            const portList = parsePorts(portsInput);
+            if (portList.length === 0) return alert('请输入有效的端口号');
+            if (portList.length > 1000) return alert('单次扫描端口数量不能超过1000个');
+
+            startTask('port');
+            const resultBox = document.getElementById('port-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = `<span class="loading"></span>正在扫描 ${portList.length} 个端口...`;
+
+            const controller = abortControllers['port'];
+
+            const services = {
+                21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
+                80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB',
+                3306: 'MySQL', 3389: 'RDP', 5432: 'PostgreSQL', 6379: 'Redis',
+                8080: 'HTTP-Alt', 27017: 'MongoDB'
+            };
+
+            const startTime = performance.now();
+            let result = `主机: ${host}\n扫描端口: ${portList.length} 个\n协议: TCP\n\n`;
+            result += `${'端口'.padEnd(8)}${'服务'.padEnd(12)}状态    延迟\n`;
+            result += '-'.repeat(45) + '\n';
+
+            let openCount = 0;
+            let scannedCount = 0;
+            let openPorts = [];
+
+            for (const port of portList) {
+                if (controller.signal.aborted) {
+                    result += `\n⚠ 用户手动停止，已扫描 ${scannedCount}/${portList.length} 个端口`;
+                    break;
+                }
+
+                const service = services[port] || '-';
+                
+                try {
+                    const response = await fetch(`${API_SERVER}/api/port`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ host, port, timeout: 3 }),
+                        signal: controller.signal
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const contentType = response.headers.get('content-type') || '';
+                    if (!contentType.includes('application/json')) {
+                        throw new Error('非JSON响应');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.open) {
+                        result += `${port.toString().padEnd(8)}${service.padEnd(12)}开放 ✓   ${data.latency_ms?.toFixed(1) || '-'}ms\n`;
+                        openCount++;
+                        openPorts.push(port);
+                    } else {
+                        result += `${port.toString().padEnd(8)}${service.padEnd(12)}关闭 ✗   -\n`;
+                    }
+                } catch (e) {
+                    if (e.name === 'AbortError') {
+                        result += `\n⚠ 用户手动停止，已扫描 ${scannedCount}/${portList.length} 个端口`;
+                        break;
+                    }
+                    result += `${port.toString().padEnd(8)}${service.padEnd(12)}错误 ✗   ${e.message}\n`;
+                }
+                
+                scannedCount++;
+
+                if (scannedCount % 10 === 0 || scannedCount === portList.length) {
+                    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+                    const progressInfo = `\n\n${'─'.repeat(45)}\n进度: ${scannedCount}/${portList.length} | 耗时: ${elapsed}s | 开放: ${openCount}`;
+                    resultBox.innerHTML = result + progressInfo;
+                }
+            }
+
+            const totalTime = ((performance.now() - startTime) / 1000).toFixed(1);
+            result += `\n${'─'.repeat(45)}`;
+            result += `\n扫描完成: ${scannedCount}/${portList.length} 个端口`;
+            result += `\n耗时: ${totalTime}s`;
+            result += `\n开放端口: ${openCount} 个`;
+            if (openPorts.length > 0) {
+                result += `\n开放列表: ${openPorts.join(', ')}`;
+            }
+
+            resultBox.className = controller.signal.aborted ? 'result-box warning' : 'result-box info';
+            resultBox.innerHTML = result;
+            addHistory('端口', host, `扫描 ${scannedCount} 个端口，${openCount} 个开放`);
+            endTask('port');
+        }
+
+        async function refreshInfo() {
+            document.getElementById('public-ip').textContent = '检测中...';
+            document.getElementById('net-type').textContent = '检测中...';
+
+            // 获取公网IP（优先使用第三方服务获取客户端真实IP）
+            // 支持CORS的服务列表
+            const ipServices = [
+                { name: 'ipapi', url: 'https://ipapi.co/json/', ipKey: 'ip', ispKey: 'org' },
+                { name: 'ipinfo', url: 'https://ipinfo.io/json', ipKey: 'ip', ispKey: 'org' },
+                { name: 'ipify', url: 'https://api.ipify.org?format=json', ipKey: 'ip', ispKey: null },
+                { name: 'myip', url: 'https://api.myip.com', ipKey: 'ip', ispKey: null },
+                { name: 'httpbin', url: 'https://httpbin.org/ip', ipKey: 'origin', ispKey: null }
+            ];
+
+            let ip = null;
+            let isp = null;
+            let country = null;
+            let region = null;
+
+            for (const service of ipServices) {
+                try {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 10000);
+                    const resp = await fetch(service.url, { 
+                        signal: controller.signal,
+                        mode: 'cors'
+                    });
+                    clearTimeout(timeout);
+                    
+                    if (!resp.ok) continue;
+                    const data = await resp.json();
+                    
+                    ip = data[service.ipKey];
+                    if (service.ispKey && data[service.ispKey]) {
+                        isp = data[service.ispKey];
+                    }
+                    if (data.country) country = data.country;
+                    if (data.region) region = data.region;
+                    if (data.city) region = data.city;
+                    
+                    if (ip && isp) break;  // 找到IP和ISP信息就停止
+                    if (ip && !isp) continue;  // 只有IP没有ISP，继续尝试其他服务
+                } catch (e) {
+                    console.log(`${service.name} failed:`, e.message);
+                    continue;
+                }
+            }
+
+            // 如果所有第三方服务都失败，尝试后端API作为备选
+            if (!ip && API_SERVER) {
+                try {
+                    const resp = await fetch(`${API_SERVER}/api/ip`, { 
+                        signal: AbortSignal.timeout(10000)
+                    });
+                    const data = await resp.json();
+                    if (data.success) {
+                        ip = data.ip;
+                        isp = data.isp || data.org;
+                    }
+                } catch (e) {
+                    console.log('Backend API failed:', e);
+                }
+            }
+
+            document.getElementById('public-ip').textContent = ip || '获取失败';
+
+            // 显示网络类型（运营商或连接类型）
+            if (isp) {
+                // 清理运营商名称，转换为中文显示
+                isp = isp.replace(/AS\d+\s*/, '').trim();
+                
+                // 运营商名称映射
+                const ispMap = {
+                    'China Telecom': '中国电信',
+                    'China Unicom': '中国联通', 
+                    'China Mobile': '中国移动',
+                    'China Education and Research Network Center': '中国教育网',
+                    'Alibaba Cloud': '阿里云',
+                    'Tencent cloud computing': '腾讯云',
+                    'Huawei Cloud': '华为云',
+                    'Baidu': '百度'
+                };
+                
+                for (const [key, value] of Object.entries(ispMap)) {
+                    if (isp.includes(key)) {
+                        isp = value;
+                        break;
+                    }
+                }
+                
+                document.getElementById('net-type').textContent = isp;
+            } else if (navigator.connection) {
+                const connType = navigator.connection.effectiveType || navigator.connection.type || '';
+                const typeMap = { 'wifi': 'WiFi', '4g': '4G/5G', '3g': '3G', '2g': '2G', 'ethernet': '以太网' };
+                document.getElementById('net-type').textContent = typeMap[connType] || connType.toUpperCase() || '未知';
+            } else {
+                document.getElementById('net-type').textContent = '未知';
+            }
+
+            document.getElementById('user-agent').textContent = navigator.userAgent;
+            document.getElementById('screen-res').textContent =
+                `${window.screen.width} × ${window.screen.height}`;
+            document.getElementById('pixel-ratio').textContent = window.devicePixelRatio;
+        }
+
+        // 批量检测 - 通过后端API (先解析IP，再ICMP ping)
+        async function doBatchCheck() {
+            const hostsText = document.getElementById('batch-hosts').value.trim();
+            if (!hostsText) return alert('请输入主机列表');
+
+            const hosts = hostsText.split('\n').map(h => h.trim()).filter(h => h);
+
+            startTask('batch');
+            const resultBox = document.getElementById('batch-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>正在批量检测...';
+
+            const controller = abortControllers['batch'];
+            const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+
+            try {
+                const url = `${API_SERVER}/api/batch_ping`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hosts, count: 2, timeout: 5 }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`服务器返回 ${response.status}: ${response.statusText}`);
+                }
+                
+                const contentType = response.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`API返回了非JSON响应: ${text.substring(0, 100)}`);
+                }
+                
+                const data = await response.json();
+
+                if (controller.signal.aborted) {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ 检测已取消`;
+                    return;
+                }
+
+                let result = `检测时间: ${new Date().toLocaleString('zh-CN')}\n`;
+                result += `主机数量: ${data.total}\n`;
+                result += `协议: ICMP\n\n`;
+                result += `${'主机'.padEnd(22)}${'IP地址'.padEnd(16)}状态    延迟\n`;
+                result += '-'.repeat(65) + '\n';
+
+                for (const r of data.results) {
+                    const status = r.success ? '在线' : '离线';
+                    const statusIcon = r.success ? '✓' : '✗';
+                    const latency = r.success && r.avg_rtt ? `${r.avg_rtt.toFixed(1)}ms` : 'N/A';
+                    const ip = r.resolved_ip || r.ip || '-';
+                    result += `${r.host.padEnd(22)}${ip.padEnd(16)}${status} ${statusIcon}    ${latency}\n`;
+                }
+
+                result += `\n[摘要] ${data.online}/${data.total} 台主机在线`;
+
+                resultBox.className = 'result-box info';
+                resultBox.innerHTML = result;
+                addHistory('批量', `${hosts.length}台主机`, `在线 ${data.online} 台`);
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ 检测已取消`;
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 请求失败
+
+错误: ${e.message}
+请检查API服务器是否启动: ${API_SERVER}`;
+                }
+            }
+            endTask('batch');
+        }
+
+        // 设置API服务器
+        async function setApiServer() {
+            const currentApiServer = localStorage.getItem('apiServer') || API_SERVER;
+            const server = prompt('请输入API服务器地址:\n例如: https://tencent.markli.cn/network', currentApiServer);
+            if (server && server.trim()) {
+                let apiUrl = server.trim().replace(/\/$/, '');
+                
+                // 显示检测提示
+                alert('正在检测服务器连接，请稍候...');
+                
+                // 先测试用户输入的协议
+                let finalUrl = apiUrl;
+                let protocol = 'https';
+                
+                if (apiUrl.startsWith('http://')) {
+                    // 用户输入HTTP，先尝试HTTPS
+                    const httpsOk = await checkHttpsAvailable(apiUrl);
+                    if (httpsOk) {
+                        finalUrl = apiUrl.replace('http://', 'https://');
+                        protocol = 'https';
+                    } else {
+                        // HTTPS不可用，测试HTTP
+                        const httpOk = await checkHttpAvailable(apiUrl);
+                        if (httpOk) {
+                            finalUrl = apiUrl;
+                            protocol = 'http';
+                        } else {
+                            alert('无法连接到服务器，请检查地址是否正确');
+                            return;
+                        }
+                    }
+                } else if (apiUrl.startsWith('https://')) {
+                    // 用户输入HTTPS，测试是否可用
+                    const httpsOk = await checkHttpsAvailable(apiUrl);
+                    if (!httpsOk) {
+                        // HTTPS不可用，尝试HTTP
+                        const httpOk = await checkHttpAvailable(apiUrl);
+                        if (httpOk) {
+                            finalUrl = apiUrl.replace('https://', 'http://');
+                            protocol = 'http';
+                            alert('HTTPS不可用，已切换到HTTP');
+                        } else {
+                            alert('无法连接到服务器，请检查地址是否正确');
+                            return;
+                        }
+                    }
+                } else {
+                    // 没有协议前缀，默认尝试HTTPS
+                    const httpsOk = await checkHttpsAvailable('https://' + apiUrl);
+                    if (httpsOk) {
+                        finalUrl = 'https://' + apiUrl;
+                        protocol = 'https';
+                    } else {
+                        const httpOk = await checkHttpAvailable('http://' + apiUrl);
+                        if (httpOk) {
+                            finalUrl = 'http://' + apiUrl;
+                            protocol = 'http';
+                        } else {
+                            alert('无法连接到服务器，请检查地址是否正确');
+                            return;
+                        }
+                    }
+                }
+                
+                localStorage.setItem('apiServer', finalUrl);
+                alert('设置成功！\n服务器地址: ' + finalUrl + '\n协议: ' + protocol.toUpperCase());
+                // 自动刷新页面
+                window.location.reload();
+            }
+        }
+
+        // 初始化
+        renderHistory();
+        refreshInfo();
+    </script>
+</body>
+</html>

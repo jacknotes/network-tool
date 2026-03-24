@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+nohup.out
+server.log
+
+# APK构建产物
+*.apk
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Cordova
+network-tool-app/platforms/android/build/
+network-tool-app/platforms/android/.gradle/
+network-tool-app/platforms/android/app/build/
+network-tool-app/platforms/android/CordovaLib/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
