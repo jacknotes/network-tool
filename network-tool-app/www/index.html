@@ -680,6 +680,27 @@ qq.com</textarea>
             </div>
         </div>
 
+        <!-- SSL 证书 -->
+        <div id="cert-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">🔒</span>
+                    SSL 证书信息
+                    <span class="timeout-badge">超时 30s</span>
+                </div>
+                <div class="input-group">
+                    <label>主机（服务器视角查询证书）</label>
+                    <input type="text" id="cert-host" placeholder="例如: baidu.com" value="baidu.com">
+                    <input type="number" id="cert-port" placeholder="端口（默认 443）" value="443" min="1" max="65535" style="margin-top:8px">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="cert-start-btn" onclick="doCert()">查询证书</button>
+                    <button class="btn btn-stop" id="cert-stop-btn" onclick="stopTask('cert')">停止</button>
+                </div>
+                <div id="cert-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
         <!-- 历史记录 -->
         <div class="section">
             <div class="section-title">
@@ -1849,7 +1870,7 @@ API地址: ${API_SERVER}/api/mtr
             endTask('whois');
         }
 
-                // TCP Ping - \u7eaf\u524d\u7aef\u672c\u5730\u6d4b\u91cf\uff08fetch no-cors \u8ba1\u65f6\uff0c\u591a\u8f6e + min/avg/max\uff09
+        // TCP Ping - \u7eaf\u524d\u7aef\u672c\u5730\u6d4b\u91cf\uff08fetch no-cors \u8ba1\u65f6\uff0c\u591a\u8f6e + min/avg/max\uff09
         async function doTcpPing() {
             const host = document.getElementById('tcp-ping-host').value.trim();
             const port = parseInt(document.getElementById('tcp-ping-port').value, 10);
@@ -1930,7 +1951,7 @@ API地址: ${API_SERVER}/api/mtr
             endTask('tcp-ping');
         }
 
-// CIDR 计算器 - 纯前端本地计算，无网络请求
+        // CIDR 计算器 - 纯前端本地计算，无网络请求
         function doCidr() {
             const input = document.getElementById('cidr-input').value.trim();
             const resultBox = document.getElementById('cidr-result');
@@ -2002,6 +2023,80 @@ API地址: ${API_SERVER}/api/mtr
             resultBox.className = 'result-box success';
             resultBox.innerHTML = lines.join('\n');
             addHistory('CIDR', input, `${usableHosts.toLocaleString()} 主机`);
+        }
+
+        // SSL 证书查询 - 服务器视角（后端 openssl）
+        async function doCert() {
+            const host = document.getElementById('cert-host').value.trim();
+            const port = parseInt(document.getElementById('cert-port').value, 10) || 443;
+            if (!host) return alert('请输入主机');
+            if (port < 1 || port > 65535) return alert('端口范围 1-65535');
+
+            startTask('cert');
+            const resultBox = document.getElementById('cert-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>正在查询证书...';
+
+            const controller = abortControllers['cert'];
+            const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+
+            try {
+                const response = await fetch(`${API_SERVER}/api/cert`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host, port }),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error || `服务器返回 ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const lines = [];
+                    lines.push(`✓ 查询成功`);
+                    lines.push(`源IP: ${data.source_ip || '未知'}`);
+                    lines.push(`主机: ${host}:${port}`);
+                    if (data.subject) lines.push(`证书主体: ${data.subject}`);
+                    if (data.issuer) lines.push(`签发机构: ${data.issuer}`);
+                    if (data.not_before) lines.push(`生效时间: ${data.not_before}`);
+                    if (data.not_after) lines.push(`过期时间: ${data.not_after}`);
+                    if (data.days_left !== null && data.days_left !== undefined) {
+                        if (data.days_left < 0) {
+                            lines.push(`剩余天数: 已过期 ${-data.days_left} 天`);
+                        } else {
+                            lines.push(`剩余天数: ${data.days_left} 天${data.days_left < 30 ? '（即将过期！）' : ''}`);
+                        }
+                    }
+                    if (data.san) lines.push(`备用名称(SAN): ${data.san}`);
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = lines.join('\n');
+                    addHistory('证书', `${host}:${port}`, data.days_left !== null && data.days_left !== undefined ? `剩 ${data.days_left} 天` : '查询成功');
+                } else {
+                    throw new Error(data.error || '未获取到证书信息');
+                }
+            } catch (e) {
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ 证书查询已取消`;
+                    addHistory('证书', `${host}:${port}`, '已取消');
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 查询失败
+
+主机: ${host}:${port}
+错误: ${e.message}`;
+                    addHistory('证书', `${host}:${port}`, '查询失败');
+                }
+            }
+            endTask('cert');
         }
 
         // 设置API服务器

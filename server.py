@@ -413,6 +413,108 @@ def whois_lookup():
             'source_ip': get_local_ip()
         })
 
+@app.route('/api/cert', methods=['POST'])
+@rate_limit_decorator
+@concurrent_limit_decorator
+def cert_lookup():
+    """SSL 证书信息查询（openssl）"""
+    data = request.get_json()
+    host = data.get('host', '')
+    port = data.get('port', 443)
+
+    valid, msg = validate_host(host)
+    if not valid:
+        return jsonify({'success': False, 'error': msg}), 400
+
+    try:
+        port = int(port)
+        if port < 1 or port > 65535:
+            return jsonify({'success': False, 'error': '端口范围 1-65535'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': '端口格式无效'}), 400
+
+    try:
+        proc = subprocess.run(
+            ['bash', '-c', f'echo | openssl s_client -connect {host}:{port} -servername {host} 2>/dev/null | openssl x509 -noout -subject -issuer -dates -ext subjectAltName'],
+            capture_output=True, text=True, timeout=15
+        )
+        output = proc.stdout
+
+        subject = ''
+        issuer = ''
+        not_before = ''
+        not_after = ''
+        san = ''
+        subject_match = re.search(r'subject=(.+)', output)
+        if subject_match:
+            subject = subject_match.group(1).strip()
+        issuer_match = re.search(r'issuer=(.+)', output)
+        if issuer_match:
+            issuer = issuer_match.group(1).strip()
+        nb_match = re.search(r'notBefore=(.+)', output)
+        if nb_match:
+            not_before = nb_match.group(1).strip()
+        na_match = re.search(r'notAfter=(.+)', output)
+        if na_match:
+            not_after = na_match.group(1).strip()
+        san_match = re.search(r'Subject Alternative Name:\s*(.+)', output)
+        if san_match:
+            san = san_match.group(1).strip()
+
+        days_left = None
+        if not_after:
+            try:
+                from datetime import datetime
+                expiry = datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z')
+                days_left = (expiry - datetime.utcnow()).days
+            except (ValueError, TypeError):
+                days_left = None
+
+        has_info = bool(subject or not_after)
+        return jsonify({
+            'success': has_info,
+            'host': host,
+            'port': port,
+            'subject': subject,
+            'issuer': issuer,
+            'not_before': not_before,
+            'not_after': not_after,
+            'san': san,
+            'days_left': days_left,
+            'raw_output': output,
+            'source': 'server',
+            'source_ip': get_local_ip(),
+            'error': None if has_info else '未获取到证书信息（端口可能未启用 TLS 或 openssl 缺失）'
+        })
+
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'host': host,
+            'error': '证书查询超时',
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
+        })
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'host': host,
+            'error': '服务器未安装 openssl 或 bash',
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'host': host,
+            'error': str(e),
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
+        })
+
 @app.route('/api/port', methods=['POST'])
 @rate_limit_decorator
 @concurrent_limit_decorator
