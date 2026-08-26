@@ -434,28 +434,36 @@ def http_check():
             'status_code': response.status_code,
             'latency_ms': elapsed,
             'final_url': response.url,
-            'error': None
+            'error': None,
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     except requests.exceptions.Timeout:
         return jsonify({
             'success': False,
             'url': url,
             'host': host,
-            'error': '请求超时'
+            'error': '请求超时',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     except requests.exceptions.ConnectionError:
         return jsonify({
             'success': False,
             'url': url,
             'host': host,
-            'error': '连接失败'
+            'error': '连接失败',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     except Exception as e:
         return jsonify({
             'success': False,
             'url': url,
             'host': host,
-            'error': str(e)
+            'error': str(e),
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
 
 @app.route('/api/batch_ping', methods=['POST'])
