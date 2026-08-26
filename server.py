@@ -281,6 +281,9 @@ def dns_lookup():
     if not re.match(r'^\d+\.\d+\.\d+\.\d+$', dns_server):
         return jsonify({'success': False, 'error': 'DNS服务器地址格式无效'}), 400
     
+    if record_type not in ['A', 'AAAA', 'NS', 'MX', 'TXT', 'CNAME', 'SOA', 'PTR']:
+        return jsonify({'success': False, 'error': '不支持的记录类型'}), 400
+    
     try:
         system = platform.system()
         
