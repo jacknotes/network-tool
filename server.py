@@ -560,7 +560,7 @@ def traceroute():
         has_traceroute = shutil.which('traceroute') or (system == 'Windows' and shutil.which('tracert'))
         
         # 发送开始事件
-        yield f"data: {json.dumps({'type': 'start', 'host': host, 'target_ip': target_ip})}\n\n"
+        yield f"data: {json.dumps({'type': 'start', 'host': host, 'target_ip': target_ip, 'source': 'server', 'source_ip': get_local_ip()})}\n\n"
         
         if has_traceroute:
             # 使用系统traceroute命令
