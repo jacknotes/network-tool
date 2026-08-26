@@ -526,7 +526,9 @@ def batch_ping():
         'success': True,
         'results': results,
         'total': len(results),
-        'online': sum(1 for r in results if r.get('success', False))
+        'online': sum(1 for r in results if r.get('success', False)),
+        'source': 'server',
+        'source_ip': get_local_ip()
     })
 
 @app.route('/api/traceroute', methods=['POST'])
