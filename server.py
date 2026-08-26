@@ -313,20 +313,26 @@ def dns_lookup():
             'dns_server': dns_server,
             'type': record_type,
             'records': records,
-            'raw_output': output
+            'raw_output': output,
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     
     except subprocess.TimeoutExpired:
         return jsonify({
             'success': False,
             'error': 'DNS查询超时',
-            'raw_output': ''
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e),
-            'raw_output': ''
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
 
 @app.route('/api/port', methods=['POST'])
