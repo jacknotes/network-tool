@@ -243,19 +243,25 @@ def ping():
         output = proc.stdout + proc.stderr
         
         result = parse_ping_output(output, system)
+        result['source'] = 'server'
+        result['source_ip'] = get_local_ip()
         return jsonify(result)
     
     except subprocess.TimeoutExpired:
         return jsonify({
             'success': False,
             'error': 'ping超时',
-            'raw_output': '命令执行超时'
+            'raw_output': '命令执行超时',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e),
-            'raw_output': ''
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
 
 @app.route('/api/dns', methods=['POST'])
