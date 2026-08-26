@@ -1591,6 +1591,21 @@ API地址: ${API_SERVER}/api/mtr
         }
 
         // 初始化
+        // 为各功能 Tab 标题注入测试源 badge（服务器视角橙色 / 终端本地绿色）
+        // 走后端的功能：ping/traceroute/mtr/batch/cert；终端本地：dns/http/port/info/whois/tcp-ping；cidr 纯计算无源
+        document.querySelectorAll('.section-title').forEach(t => {
+            const content = t.closest('.tab-content');
+            if (!content) return;
+            const id = content.id.replace('-content', '');
+            if (id === 'cidr') return;
+            const serverKinds = ['ping', 'traceroute', 'mtr', 'batch', 'cert'];
+            const kind = serverKinds.includes(id) ? 'server' : 'local';
+            const badge = document.createElement('span');
+            badge.className = 'source-badge ' + kind;
+            badge.id = id + '-source-badge';
+            badge.textContent = getSourceLabel(kind);
+            t.appendChild(badge);
+        });
         renderHistory();
         refreshInfo();
     </script>
