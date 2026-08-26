@@ -822,6 +822,7 @@ qq.com</textarea>
                     resultBox.className = 'result-box success';
                     resultBox.innerHTML = `✓ 主机可达 (ICMP)
                     
+源IP: ${data.source_ip || '未知'}
 主机: ${host}
 IP地址: ${data.ip || '已解析'}
 发送/接收: ${data.packets_sent}/${data.packets_received} 包
@@ -1078,7 +1079,7 @@ URL: ${url}
                             const event = JSON.parse(line.substring(6));
                             
                             if (event.type === 'start') {
-                                resultBox.innerHTML = `<span class="loading"></span>正在跟踪路由到 ${event.host} (${event.target_ip})...\n\n` + header;
+                                resultBox.innerHTML = `<span class="loading"></span>正在跟踪路由到 ${event.host} (${event.target_ip})...\n源IP: ${event.source_ip || '未知'}\n\n` + header;
                             } else if (event.type === 'hop') {
                                 hops.push(event.data);
                                 updateTracerouteDisplay(resultBox, hops, host, header);
@@ -1187,7 +1188,7 @@ API地址: ${API_SERVER}/api/traceroute
                     resultBox.innerHTML = `⚠ MTR诊断已取消`;
                     addHistory('MTR', host, '已取消');
                 } else if (data.success && data.hops && data.hops.length > 0) {
-                    let result = `目标: ${host}\n检测次数: ${data.count}\n总跳数: ${data.total_hops}\n\n`;
+                    let result = `源IP: ${data.source_ip || '未知'}\n目标: ${host}\n检测次数: ${data.count}\n总跳数: ${data.total_hops}\n\n`;
                     result += `${'跳数'.padEnd(6)}${'丢包%'.padEnd(8)}${'发送'.padEnd(6)}${'平均'.padEnd(8)}${'最好'.padEnd(8)}${'最差'.padEnd(8)}${'IP地址'.padEnd(18)}主机名\n`;
                     result += '-'.repeat(85) + '\n';
                     
@@ -1484,7 +1485,7 @@ API地址: ${API_SERVER}/api/mtr
                     return;
                 }
 
-                let result = `检测时间: ${new Date().toLocaleString('zh-CN')}\n`;
+                let result = `源IP: ${data.source_ip || '未知'}\n检测时间: ${new Date().toLocaleString('zh-CN')}\n`;
                 result += `主机数量: ${data.total}\n`;
                 result += `协议: ICMP\n\n`;
                 result += `${'主机'.padEnd(22)}${'IP地址'.padEnd(16)}状态    延迟\n`;
