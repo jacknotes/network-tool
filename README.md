@@ -9,11 +9,16 @@
 - **Ping 检测** - ICMP 连通性测试，返回丢包率与最小/平均/最大延迟
 - **路由跟踪** - Traceroute 路径追踪，SSE 流式逐跳实时输出
 - **MTR 诊断** - 网络质量综合分析（丢包率、平均/最好/最差延迟、标准差）
-- **DNS 查询** - 域名解析检测，支持自定义 DNS 服务器与记录类型
+- **DNS 查询** - 域名解析检测，支持自定义 DNS 服务器与 8 种记录类型（A/AAAA/NS/MX/TXT/CNAME/SOA/PTR）
 - **端口扫描** - TCP 端口状态检测，支持范围扫描（如 `1-1000`）与服务名识别
 - **HTTP 检测** - 网站可达性测试，返回状态码与响应时间
 - **批量检测** - 多主机批量 Ping，一次最多 10 台主机
+- **Whois 查询** - 域名注册信息（终端本地 RDAP 优先，失败降级服务器 whois）
+- **TCP Ping** - 前端本地 fetch 测量 TCP 连通延迟，多轮统计 min/avg/max
+- **CIDR 计算器** - 纯前端子网计算（网络/广播地址、掩码、可用主机数、私网判断）
+- **SSL 证书** - 证书主体、签发机构、有效期、剩余天数、SAN（后端 openssl）
 - **本机信息** - 公网 IP、运营商、User Agent、屏幕分辨率、设备像素比
+- **双源标识** - 所有接口区分「服务器视角」与「终端本地」源，结果首行显示源 IP 或「本地」
 - **检测历史** - 本地存储最近 20 条检测记录
 - **任务可中止** - 每个 Tab 均支持「开始 / 停止」按钮，基于 `AbortController` 取消请求
 - **安全防护** - 请求限流、并发限制、域名白名单
@@ -86,8 +91,8 @@ network-tool/
   ```json
   {
     "domain": "google.com",           // 域名
-    "dns_server": "114.114.114.114",  // DNS服务器
-    "type": "A"                       // 记录类型
+    "dns_server": "114.114.114.114",  // DNS服务器（纯 IP 走后端；DoH 地址如 https://223.5.5.5/resolve 由终端本地解析）
+    "type": "A"                       // 记录类型：A/AAAA/NS/MX/TXT/CNAME/SOA/PTR
   }
   ```
 - **响应**:
@@ -95,9 +100,13 @@ network-tool/
   {
     "success": true,
     "domain": "google.com",
-    "records": ["142.250.190.78"]
+    "type": "A",
+    "records": ["142.250.190.78"],
+    "source": "server",               // 后端解析时为 server
+    "source_ip": "172.18.0.1"         // 执行解析的服务器 IP（DoH 本地解析时不返回此字段，前端显示「源：本机」）
   }
   ```
+- **双源说明**: 若 `dns_server` 以 `https://` 开头，前端直接 fetch DoH JSON 接口（终端本地解析，5 秒超时）；纯 IP 地址则调后端 `/api/dns`。前端 badge 会根据选中 DNS 服务器动态切换「终端本地」/「服务器」标签。
 
 ### 3. 路由跟踪
 - **接口**: `POST /api/traceroute`
@@ -230,7 +239,59 @@ network-tool/
   }
   ```
 
-### 9. 健康检查
+### 9. Whois查询
+- **接口**: `POST /api/whois`
+- **描述**: 域名注册信息查询（前端优先走终端本地 RDAP `https://rdap.org/domain/<host>`，失败或输入 IP 时降级调后端 whois）
+- **参数**:
+  ```json
+  {
+    "host": "baidu.com"
+  }
+  ```
+- **响应**:
+  ```json
+  {
+    "success": true,
+    "host": "baidu.com",
+    "registrar": "MarkMonitor Inc.",
+    "creation_date": "1999-10-11",
+    "expiry_date": "2026-10-11",
+    "status": "ok",
+    "source": "server",
+    "source_ip": "172.18.0.1"
+  }
+  ```
+- **降级**: 服务器需安装 `whois` 命令；前端 RDAP 走终端本地，不消耗后端资源
+
+### 10. SSL证书查询
+- **接口**: `POST /api/cert`
+- **描述**: SSL 证书信息查询（后端 openssl 获取，服务器视角）
+- **参数**:
+  ```json
+  {
+    "host": "baidu.com",
+    "port": 443            // 默认 443
+  }
+  ```
+- **响应**:
+  ```json
+  {
+    "success": true,
+    "host": "baidu.com",
+    "port": 443,
+    "subject": "C=CN, ST=...",
+    "issuer": "C=US, O=DigiCert...",
+    "not_before": "Mar  3 00:00:00 2024 GMT",
+    "not_after": "Mar  3 23:59:59 2027 GMT",
+    "san": "DNS:baidu.com, DNS:www.baidu.com",
+    "days_left": 189,
+    "source": "server",
+    "source_ip": "172.18.0.1"
+  }
+  ```
+- **依赖**: 服务器需安装 `openssl`（与 `bash` 用于管道）
+
+### 11. 健康检查
 - **接口**: `GET /health`
 - **描述**: 服务健康状态检查
 - **响应**: `{"status": "ok", "version": "2.0"}`
@@ -243,11 +304,11 @@ network-tool/
 # 1. 安装依赖
 pip install flask flask-cors requests
 
-# 2. （可选）系统工具，提供原生 ping/traceroute/mtr/dig 能力
+# 2. （可选）系统工具，提供原生 ping/traceroute/mtr/dig/whois/openssl 能力
 # Ubuntu/Debian
-sudo apt install mtr traceroute iputils-ping dnsutils
+sudo apt install mtr traceroute iputils-ping dnsutils whois openssl
 # CentOS/RHEL
-sudo yum install mtr traceroute iputils bind-utils
+sudo yum install mtr traceroute iputils bind-utils whois openssl
 
 # 3. 启动服务（默认监听 0.0.0.0:8080）
 python3 server.py

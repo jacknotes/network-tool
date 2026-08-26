@@ -67,6 +67,8 @@ network-tool/
 | Traceroute | `tracert` | `traceroute`（缺失时回退到 Python 原生 socket 实现） |
 | MTR | `tracert` 多次循环模拟 | `mtr --report --json`（缺失时回退到文本解析） |
 | DNS | `nslookup` | `dig` |
+| Whois | 不支持（前端 RDAP 降级失败时报错） | `whois` |
+| SSL 证书 | 不支持（返回错误） | `openssl` + `bash`（`s_client | x509` 管道） |
 
 **新增依赖系统命令的功能时**，必须在 `docs/DEPLOY.md` 的系统工具安装说明中补充对应包。
 
@@ -166,6 +168,8 @@ cordova build android --release  # Release 未签名
 | `/api/http` | POST | 否 | `verify=False`，跟随重定向 |
 | `/api/batch_ping` | POST | 否 | `hosts` 上限 10 |
 | `/api/ip` | GET | 否 | 多源回退：ip-api → ipinfo |
+| `/api/whois` | POST | 否 | 前端优先终端本地 RDAP（rdap.org），失败或 IP 输入时降级后端 `whois` 命令 |
+| `/api/cert` | POST | 否 | 后端 `openssl s_client \| x509` 管道，返回 subject/issuer/日期/SAN/days_left |
 | `/health` | GET | 否 | 返回 `{"status":"ok","version":"2.0"}` |
 
 改动响应字段时，务必同步改前端解析代码（两个 `index.html`）。

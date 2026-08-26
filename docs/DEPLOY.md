@@ -150,12 +150,12 @@ cd /opt && tar xzf network-tool.tar.gz
 # Python 依赖
 pip3 install flask flask-cors requests
 
-# 系统工具（MTR/Traceroute 功能需要）
+# 系统工具（MTR/Traceroute/Whois/证书功能需要）
 # Ubuntu/Debian
-sudo apt install mtr traceroute iputils-ping dnsutils
+sudo apt install mtr traceroute iputils-ping dnsutils whois openssl
 
 # CentOS/RHEL
-sudo yum install mtr traceroute iputils bind-utils
+sudo yum install mtr traceroute iputils bind-utils whois openssl
 ```
 
 #### 3. 配置服务
@@ -181,8 +181,8 @@ APK 首次打开时配置新的服务器地址即可，或：
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y \
-    mtr traceroute iputils-ping dnsutils \
-    && rm -rf /var/lib/apt/lists/*
+mtr traceroute iputils-ping dnsutils whois openssl \
+&& rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY . .
@@ -263,6 +263,8 @@ curl http://localhost:8080/api/ip
 | MTR 不可用 | 安装 mtr：`apt install mtr` 或 `yum install mtr` |
 | Traceroute 不可用 | 安装：`apt install traceroute` |
 | DNS 查询失败 | 安装 dig：`apt install dnsutils` |
+| Whois 降级失败 | 安装：`apt install whois`（前端 RDAP 失败时走后端 whois；IP 输入始终走后端） |
+| 证书查询失败 | 安装：`apt install openssl`，且需 `bash` 可用（`openssl s_client \| x509` 管道） |
 | SSE 流式响应中断 | Nginx 配置 `proxy_buffering off` |
 | APK HTTPS 混合内容 | 配置 SSL 证书或使用 HTTP |
 
