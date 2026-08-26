@@ -666,6 +666,15 @@ qq.com</textarea>
             }
         }
         
+        // 生成测试源标识文本：区分服务器视角与终端本地视角（Web 为本机，APK 为手机）
+        function getSourceLabel(kind) {
+            const isApk = window.location.protocol === 'file:';
+            const localLabel = isApk ? '源：手机' : '源：本机';
+            if (kind === 'server') return '源：服务器';
+            if (kind === 'local') return localLabel;
+            return '';
+        }
+
         const API_SERVER = getApiBase();
         let history = JSON.parse(localStorage.getItem('netDiagHistory') || '[]');
         let abortControllers = {};
