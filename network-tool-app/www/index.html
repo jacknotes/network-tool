@@ -209,6 +209,12 @@
             background: rgba(0,217,255,0.2);
         }
 
+        .quick-btn.active {
+            background: rgba(0,217,255,0.25);
+            border-color: rgba(0,217,255,0.5);
+            color: #00d9ff;
+        }
+
         .quick-btn .icon {
             font-size: 24px;
             display: block;
@@ -345,63 +351,54 @@
 
     <div class="container">
         <div class="quick-actions">
-            <div class="quick-btn" onclick="showTab('ping')">
+            <div class="quick-btn active" data-tab="ping" onclick="showTab('ping')">
                 <span class="icon">📡</span>
                 Ping
             </div>
-            <div class="quick-btn" onclick="showTab('traceroute')">
-                <span class="icon">🛤️</span>
-                路由
-            </div>
-            <div class="quick-btn" onclick="showTab('mtr')">
-                <span class="icon">📊</span>
-                MTR
-            </div>
-            <div class="quick-btn" onclick="showTab('dns')">
-                <span class="icon">🔍</span>
-                DNS
-            </div>
-            <div class="quick-btn" onclick="showTab('http')">
-                <span class="icon">🌐</span>
-                HTTP
-            </div>
-            <div class="quick-btn" onclick="showTab('port')">
-                <span class="icon">🔌</span>
-                端口
-            </div>
-            <div class="quick-btn" onclick="showTab('info')">
-                <span class="icon">📱</span>
-                本机
-            </div>
-            <div class="quick-btn" onclick="showTab('batch')">
+            <div class="quick-btn" data-tab="batch" onclick="showTab('batch')">
                 <span class="icon">📋</span>
                 批量
             </div>
-            <div class="quick-btn" onclick="showTab('whois')">
-                <span class="icon">📝</span>
-                Whois
-            </div>
-            <div class="quick-btn" onclick="showTab('tcp-ping')">
+            <div class="quick-btn" data-tab="tcp-ping" onclick="showTab('tcp-ping')">
                 <span class="icon">⏱️</span>
                 TCP
             </div>
-            <div class="quick-btn" onclick="showTab('cert')">
+            <div class="quick-btn" data-tab="traceroute" onclick="showTab('traceroute')">
+                <span class="icon">🛤️</span>
+                路由
+            </div>
+            <div class="quick-btn" data-tab="mtr" onclick="showTab('mtr')">
+                <span class="icon">📊</span>
+                MTR
+            </div>
+            <div class="quick-btn" data-tab="port" onclick="showTab('port')">
+                <span class="icon">🔌</span>
+                端口
+            </div>
+            <div class="quick-btn" data-tab="dns" onclick="showTab('dns')">
+                <span class="icon">🔍</span>
+                DNS
+            </div>
+            <div class="quick-btn" data-tab="http" onclick="showTab('http')">
+                <span class="icon">🌐</span>
+                HTTP
+            </div>
+            <div class="quick-btn" data-tab="info" onclick="showTab('info')">
+                <span class="icon">📱</span>
+                本机
+            </div>
+            <div class="quick-btn" data-tab="whois" onclick="showTab('whois')">
+                <span class="icon">📝</span>
+                Whois
+            </div>
+            <div class="quick-btn" data-tab="cert" onclick="showTab('cert')">
                 <span class="icon">🔒</span>
                 证书
             </div>
-            <div class="quick-btn" onclick="showTab('cidr')">
+            <div class="quick-btn" data-tab="cidr" onclick="showTab('cidr')">
                 <span class="icon">🧮</span>
                 CIDR
             </div>
-        </div>
-
-        <div class="tabs">
-            <div class="tab active" data-tab="ping" onclick="showTab('ping')">Ping</div>
-            <div class="tab" data-tab="traceroute" onclick="showTab('traceroute')">路由</div>
-            <div class="tab" data-tab="mtr" onclick="showTab('mtr')">MTR</div>
-            <div class="tab" data-tab="dns" onclick="showTab('dns')">DNS</div>
-            <div class="tab" data-tab="http" onclick="showTab('http')">HTTP</div>
-            <div class="tab" data-tab="info" onclick="showTab('info')">本机</div>
         </div>
 
         <!-- Ping检测 -->
@@ -828,9 +825,16 @@ qq.com</textarea>
         function deleteDnsServer() {
             const sel = document.getElementById('dns-server');
             if (!sel || !sel.value) return;
-            const servers = loadDnsServers().filter(s => s.url !== sel.value);
+            const servers = loadDnsServers();
+            const current = servers.find(s => s.url === sel.value);
+            // 内置 DNS 服务器不可删除，仅允许删除用户自定义项
+            if (!current || current.builtin) {
+                alert('内置 DNS 服务器不可删除，仅可删除自定义项');
+                return;
+            }
+            const remaining = servers.filter(s => s.url !== sel.value);
             // 删光后恢复默认预置列表
-            saveDnsServers(servers.length > 0 ? servers : DEFAULT_DNS_SERVERS.slice());
+            saveDnsServers(remaining.length > 0 ? remaining : DEFAULT_DNS_SERVERS.slice());
             renderDnsServers();
         }
 
@@ -851,9 +855,9 @@ qq.com</textarea>
         let abortControllers = {};
 
         function showTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.quick-btn').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+            document.querySelector(`.quick-btn[data-tab="${tabName}"]`)?.classList.add('active');
             document.getElementById(`${tabName}-content`)?.classList.add('active');
         }
 
@@ -1218,7 +1222,7 @@ DNS服务器: ${dnsServer}
                 resultBox.className = 'result-box success';
                 resultBox.innerHTML = `✓ 网站可达
 
-源: ${getSourceLabel('local')}
+${getSourceLabel('local')}
 URL: ${finalUrl}
 主机: ${hostname}
 响应时间: ${latency}ms
@@ -1480,7 +1484,7 @@ API地址: ${API_SERVER}/api/mtr
             };
 
             const startTime = performance.now();
-            let result = `源: ${getSourceLabel('local')}\n主机: ${host}\n扫描端口: ${portList.length} 个\n协议: TCP\n\n`;
+            let result = `${getSourceLabel('local')}\n主机: ${host}\n扫描端口: ${portList.length} 个\n协议: TCP\n\n`;
             result += `${'端口'.padEnd(8)}${'服务'.padEnd(12)}状态    延迟\n`;
             result += '-'.repeat(45) + '\n';
 
@@ -1799,7 +1803,7 @@ API地址: ${API_SERVER}/api/mtr
                         };
                         registrar = findRegistrar(rdap.entities);
                         lines.push(`✓ 查询成功`);
-                        lines.push(`源: ${getSourceLabel('local')} (RDAP)`);
+                        lines.push(`${getSourceLabel('local')} (RDAP)`);
                         lines.push(`域名: ${host}`);
                         if (registrar) lines.push(`注册商: ${registrar}`);
                         if (ev.registration) lines.push(`注册时间: ${ev.registration}`);
@@ -1888,7 +1892,7 @@ API地址: ${API_SERVER}/api/mtr
             const protocol = port === 443 ? 'https' : 'http';
 
             try {
-                let lines = ['\u6e90: ' + getSourceLabel('local'), '\u4e3b\u673a: ' + host, '\u7aef\u53e3: ' + port, '\u534f\u8bae: ' + protocol, '', '\u8f6e\u6b21    \u5ef6\u8fdf(ms)   \u7ed3\u679c', '-'.repeat(30)];
+                let lines = [getSourceLabel('local'), '\u4e3b\u673a: ' + host, '\u7aef\u53e3: ' + port, '\u534f\u8bae: ' + protocol, '', '\u8f6e\u6b21    \u5ef6\u8fdf(ms)   \u7ed3\u679c', '-'.repeat(30)];
                 const latencies = [];
                 let dnsFailed = false;
 
