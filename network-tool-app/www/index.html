@@ -469,15 +469,13 @@
                     <input type="text" id="dns-host" placeholder="例如: google.com" value="google.com">
                 </div>
                 <div class="input-group">
-                    <label>DNS服务器</label>
-                    <select id="dns-server" style="width:100%;padding:12px 15px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:16px;outline:none;">
-                        <option value="114.114.114.114">114 DNS (114.114.114.114)</option>
-                        <option value="223.5.5.5">阿里 DNS (223.5.5.5)</option>
-                        <option value="119.29.29.29">腾讯 DNS (119.29.29.29)</option>
-                        <option value="180.76.76.76">百度 DNS (180.76.76.76)</option>
-                        <option value="8.8.8.8">Google DNS (8.8.8.8)</option>
-                        <option value="1.1.1.1">Cloudflare DNS (1.1.1.1)</option>
-                    </select>
+                    <label>DNS服务器（DoH 地址走本机解析，纯 IP 走服务器解析）</label>
+                    <div style="display:flex;gap:8px">
+                        <select id="dns-server" style="flex:1;min-width:0;padding:12px 15px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:14px;outline:none;">
+                        </select>
+                        <button type="button" class="btn btn-secondary" style="flex:0 0 44px;padding:12px 0;font-size:16px" onclick="addDnsServer()" title="添加自定义 DNS 服务器">＋</button>
+                        <button type="button" class="btn btn-secondary" style="flex:0 0 44px;padding:12px 0;font-size:16px" onclick="deleteDnsServer()" title="删除当前选中的 DNS 服务器">🗑</button>
+                    </div>
                 </div>
                 <div class="btn-row">
                     <button class="btn" id="dns-start-btn" onclick="doDns()">解析域名</button>
@@ -673,6 +671,65 @@ qq.com</textarea>
             if (kind === 'server') return '源：服务器';
             if (kind === 'local') return localLabel;
             return '';
+        }
+
+        // ===== DNS 服务器管理（预置 + 自定义，localStorage 持久化）=====
+        // 地址以 https:// 开头视为 DoH，由终端本地 fetch 解析；纯 IP 视为传统 DNS，降级由后端解析
+        const DEFAULT_DNS_SERVERS = [
+            { name: '阿里 DNS', url: 'https://223.5.5.5/dns-query', builtin: true },
+            { name: '腾讯 DNS', url: 'https://1.12.12.12/dns-query', builtin: true },
+            { name: 'Google DNS', url: 'https://8.8.8.8/resolve', builtin: true },
+            { name: 'Cloudflare', url: 'https://1.1.1.1/dns-query', builtin: true },
+            { name: '114 DNS', url: '114.114.114.114', builtin: true },
+            { name: '百度 DNS', url: '180.76.76.76', builtin: true }
+        ];
+
+        function loadDnsServers() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('netDiagDnsServers'));
+                if (Array.isArray(saved) && saved.length > 0) return saved;
+            } catch (e) {
+                // 存储损坏时回退预置列表
+            }
+            return DEFAULT_DNS_SERVERS.slice();
+        }
+
+        function saveDnsServers(servers) {
+            localStorage.setItem('netDiagDnsServers', JSON.stringify(servers));
+        }
+
+        function addDnsServer() {
+            const name = prompt('请输入 DNS 服务器名称：\n例如：我的 DoH');
+            if (!name || !name.trim()) return;
+            const url = prompt('请输入 DNS 服务器地址：\nDoH 地址（本机解析）：https://223.5.5.5/dns-query\n纯 IP 地址（服务器解析）：114.114.114.114');
+            if (!url || !url.trim()) return;
+            const trimmed = url.trim();
+            const servers = loadDnsServers();
+            if (servers.some(s => s.url === trimmed)) return alert('该 DNS 服务器已存在');
+            servers.push({ name: name.trim(), url: trimmed, builtin: false });
+            saveDnsServers(servers);
+            renderDnsServers(trimmed);
+        }
+
+        function deleteDnsServer() {
+            const sel = document.getElementById('dns-server');
+            if (!sel || !sel.value) return;
+            const servers = loadDnsServers().filter(s => s.url !== sel.value);
+            // 删光后恢复默认预置列表
+            saveDnsServers(servers.length > 0 ? servers : DEFAULT_DNS_SERVERS.slice());
+            renderDnsServers();
+        }
+
+        function renderDnsServers(selectedUrl) {
+            const sel = document.getElementById('dns-server');
+            if (!sel) return;
+            const servers = loadDnsServers();
+            const target = selectedUrl || sel.value || (servers[0] && servers[0].url) || '';
+            sel.innerHTML = servers.map(s => {
+                const tag = s.url.startsWith('https://') ? '本机' : '服务器';
+                return `<option value="${s.url}">${s.name} [${tag}]</option>`;
+            }).join('');
+            if (target && servers.some(s => s.url === target)) sel.value = target;
         }
 
         const API_SERVER = getApiBase();
@@ -1592,6 +1649,7 @@ API地址: ${API_SERVER}/api/mtr
         }
 
         // 初始化
+        renderDnsServers();
         // 为各功能 Tab 标题注入测试源 badge（服务器视角橙色 / 终端本地绿色）
         // 走后端的功能：ping/traceroute/mtr/batch/cert；终端本地：dns/http/port/info/whois/tcp-ping；cidr 纯计算无源
         document.querySelectorAll('.section-title').forEach(t => {
