@@ -477,6 +477,19 @@
                         <button type="button" class="btn btn-secondary" style="flex:0 0 44px;padding:12px 0;font-size:16px" onclick="deleteDnsServer()" title="删除当前选中的 DNS 服务器">🗑</button>
                     </div>
                 </div>
+                <div class="input-group">
+                    <label>记录类型</label>
+                    <select id="dns-type" style="width:100%;padding:12px 15px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:14px;outline:none;">
+                        <option value="A" selected>A (IPv4 地址)</option>
+                        <option value="AAAA">AAAA (IPv6 地址)</option>
+                        <option value="NS">NS (域名服务器)</option>
+                        <option value="MX">MX (邮件交换)</option>
+                        <option value="TXT">TXT (文本记录)</option>
+                        <option value="CNAME">CNAME (规范名称)</option>
+                        <option value="SOA">SOA (授权起始)</option>
+                        <option value="PTR">PTR (反向解析)</option>
+                    </select>
+                </div>
                 <div class="btn-row">
                     <button class="btn" id="dns-start-btn" onclick="doDns()">解析域名</button>
                     <button class="btn btn-stop" id="dns-stop-btn" onclick="stopTask('dns')">停止</button>
