@@ -636,6 +636,50 @@ qq.com</textarea>
             </div>
         </div>
 
+        <!-- TCP Ping -->
+        <div id="tcp-ping-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">⏱️</span>
+                    TCP Ping（前端本地）
+                    <span class="timeout-badge">终端本地测量</span>
+                </div>
+                <div class="input-group">
+                    <label>主机与端口</label>
+                    <input type="text" id="tcp-ping-host" placeholder="例如: baidu.com" value="baidu.com">
+                    <input type="number" id="tcp-ping-port" placeholder="端口" value="80" min="1" max="65535" style="margin-top:8px">
+                </div>
+                <div class="input-group">
+                    <label>测量轮数</label>
+                    <input type="number" id="tcp-ping-rounds" placeholder="默认 5 轮" value="5" min="1" max="10">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="tcp-ping-start-btn" onclick="doTcpPing()">开始测量</button>
+                    <button class="btn btn-stop" id="tcp-ping-stop-btn" onclick="stopTask('tcp-ping')">停止</button>
+                </div>
+                <div id="tcp-ping-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- CIDR 计算器 -->
+        <div id="cidr-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">🧮</span>
+                    CIDR 子网计算器（纯前端计算）
+                    <span class="timeout-badge">本地计算</span>
+                </div>
+                <div class="input-group">
+                    <label>CIDR 地址（如 192.168.1.0/24）</label>
+                    <input type="text" id="cidr-input" placeholder="例如: 192.168.1.0/24" value="192.168.1.0/24">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="cidr-start-btn" onclick="doCidr()">计算</button>
+                </div>
+                <div id="cidr-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
         <!-- 历史记录 -->
         <div class="section">
             <div class="section-title">
@@ -1803,6 +1847,161 @@ API地址: ${API_SERVER}/api/mtr
                 }
             }
             endTask('whois');
+        }
+
+                // TCP Ping - \u7eaf\u524d\u7aef\u672c\u5730\u6d4b\u91cf\uff08fetch no-cors \u8ba1\u65f6\uff0c\u591a\u8f6e + min/avg/max\uff09
+        async function doTcpPing() {
+            const host = document.getElementById('tcp-ping-host').value.trim();
+            const port = parseInt(document.getElementById('tcp-ping-port').value, 10);
+            const rounds = Math.min(Math.max(parseInt(document.getElementById('tcp-ping-rounds').value, 10) || 5, 1), 10);
+            if (!host) return alert('\u8bf7\u8f93\u5165\u4e3b\u673a');
+            if (!port || port < 1 || port > 65535) return alert('\u7aef\u53e3\u8303\u56f4 1-65535');
+
+            startTask('tcp-ping');
+            const resultBox = document.getElementById('tcp-ping-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>\u6b63\u5728\u6d4b\u91cf...';
+
+            const controller = abortControllers['tcp-ping'];
+            const protocol = port === 443 ? 'https' : 'http';
+
+            try {
+                let lines = ['\u6e90: ' + getSourceLabel('local'), '\u4e3b\u673a: ' + host, '\u7aef\u53e3: ' + port, '\u534f\u8bae: ' + protocol, '', '\u8f6e\u6b21    \u5ef6\u8fdf(ms)   \u7ed3\u679c', '-'.repeat(30)];
+                const latencies = [];
+                let dnsFailed = false;
+
+                for (let i = 1; i <= rounds; i++) {
+                    if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+                    const start = performance.now();
+                    let reachable = false;
+                    try {
+                        await fetch(`${protocol}://${host}:${port}/?_=${Date.now()}`, {
+                            mode: 'no-cors',
+                            cache: 'no-store',
+                            signal: controller.signal
+                        });
+                        reachable = true; // opaque \u54cd\u5e94\u89c6\u4e3a\u8fde\u901a
+                    } catch (e) {
+                        if (e.name === 'AbortError') throw e;
+                        // TypeError: DNS \u5931\u8d25\u6216\u8fde\u63a5\u88ab\u62d2\uff0c\u7edf\u4e00\u6807\u8bb0
+                        dnsFailed = true;
+                    }
+                    const elapsed = Math.round(performance.now() - start);
+                    if (reachable) latencies.push(elapsed);
+                    lines.push(String(i).padEnd(8) + (reachable ? String(elapsed).padEnd(10) : '').padEnd(0) + (reachable ? ' : \u2713 \u8fde\u901a' : ' : \u2717 \u5931\u8d25'));
+                    resultBox.innerHTML = lines.join('\n');
+                    if (i < rounds && !controller.signal.aborted) {
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
+
+                if (latencies.length > 0) {
+                    const min = Math.min(...latencies);
+                    const max = Math.max(...latencies);
+                    const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
+                    lines.push('', '-'.repeat(30));
+                    lines.push(`\u8fde\u901a: ${latencies.length}/${rounds} \u8f6e`);
+                    lines.push(`\u6700\u5c0f: ${min}ms | \u5e73\u5747: ${avg}ms | \u6700\u5927: ${max}ms`);
+                    if (dnsFailed) lines.push(`\u63d0\u793a: ${rounds - latencies.length} \u8f6e\u5931\u8d25\uff08\u57df\u540d\u89e3\u6790\u5931\u8d25\u6216\u7aef\u53e3\u672a\u5f00\u653e\uff09`);
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = lines.join('\n');
+                    addHistory('TCP Ping', `${host}:${port}`, `\u5e73\u5747 ${avg}ms`);
+                } else {
+                    lines.push('', '\u5168\u90e8\u8f6e\u6b21\u5931\u8d25\uff1a\u57df\u540d\u89e3\u6790\u5931\u8d25\u6216\u7aef\u53e3\u672a\u5f00\u653e');
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = lines.join('\n');
+                    addHistory('TCP Ping', `${host}:${port}`, '\u8fde\u63a5\u5931\u8d25');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = '\u26a0 TCP Ping \u5df2\u53d6\u6d88';
+                    addHistory('TCP Ping', `${host}:${port}`, '\u5df2\u53d6\u6d88');
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `\u2717 \u6d4b\u91cf\u5931\u8d25
+
+\u4e3b\u673a: ${host}:${port}
+\u9519\u8bef: ${e.message}`;
+                    addHistory('TCP Ping', `${host}:${port}`, '\u6d4b\u91cf\u5931\u8d25');
+                }
+            }
+            endTask('tcp-ping');
+        }
+
+// CIDR 计算器 - 纯前端本地计算，无网络请求
+        function doCidr() {
+            const input = document.getElementById('cidr-input').value.trim();
+            const resultBox = document.getElementById('cidr-result');
+            resultBox.style.display = 'block';
+
+            const match = input.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/);
+            if (!match) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `✗ 输入格式错误
+
+输入: ${input}
+格式: a.b.c.d/prefix（如 192.168.1.0/24）`;
+                return;
+            }
+            const octets = [parseInt(match[1]), parseInt(match[2]), parseInt(match[3]), parseInt(match[4])];
+            const prefix = parseInt(match[5]);
+            if (octets.some(o => o > 255)) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `✗ IP 地址各段必须在 0-255 之间`;
+                return;
+            }
+            if (prefix > 32) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `✗ 前缀长度必须在 0-32 之间`;
+                return;
+            }
+
+            const ipToInt = (o) => ((o[0] << 24) + (o[1] << 16) + (o[2] << 8) + o[3]) >>> 0;
+            const intToIp = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+            const toBinary = (n) => intToIp(n).split('.').map(o => o.toString(2).padStart(8, '0')).join('.');
+
+            const ipInt = ipToInt(octets);
+            const maskInt = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
+            const networkInt = (ipInt & maskInt) >>> 0;
+            const broadcastInt = (networkInt | (~maskInt >>> 0)) >>> 0;
+
+            const totalHosts = Math.pow(2, 32 - prefix);
+            let usableHosts;
+            if (prefix >= 31) {
+                usableHosts = totalHosts; // /31 点对点、/32 单主机，RFC 允许
+            } else {
+                usableHosts = totalHosts - 2;
+            }
+            const firstHost = prefix >= 31 ? networkInt : networkInt + 1;
+            const lastHost = prefix >= 31 ? broadcastInt : broadcastInt - 1;
+
+            // 私网判断
+            const isPrivate = (o) => (o[0] === 10) || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168);
+            const scope = isPrivate(octets) ? '私网' : (octets[0] === 127 ? '环回' : '公网');
+
+            const lines = [
+                `✓ 计算成功`,
+                `源: 纯前端本地计算`,
+                ``,
+                `CIDR: ${intToIp(networkInt)}/${prefix}`,
+                `类别: ${scope}地址`,
+                ``,
+                `网络地址: ${intToIp(networkInt)}`,
+                `广播地址: ${intToIp(broadcastInt)}`,
+                `子网掩码: ${intToIp(maskInt)}`,
+                `通配符掩码: ${intToIp(~maskInt >>> 0)}`,
+                `主机范围: ${intToIp(firstHost)} - ${intToIp(lastHost)}`,
+                ``,
+                `地址总数: ${totalHosts.toLocaleString()}`,
+                `可用主机: ${usableHosts.toLocaleString()}${prefix >= 31 ? '（/31+/32 特殊）' : ''}`,
+                ``,
+                `二进制掩码: ${toBinary(maskInt)}`
+            ];
+            resultBox.className = 'result-box success';
+            resultBox.innerHTML = lines.join('\n');
+            addHistory('CIDR', input, `${usableHosts.toLocaleString()} 主机`);
         }
 
         // 设置API服务器
