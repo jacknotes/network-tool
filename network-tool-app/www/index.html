@@ -1117,6 +1117,7 @@ DNS服务器: ${dnsServer}
                 resultBox.className = 'result-box success';
                 resultBox.innerHTML = `✓ 网站可达
 
+源: ${getSourceLabel('local')}
 URL: ${finalUrl}
 主机: ${hostname}
 响应时间: ${latency}ms
@@ -1378,7 +1379,7 @@ API地址: ${API_SERVER}/api/mtr
             };
 
             const startTime = performance.now();
-            let result = `主机: ${host}\n扫描端口: ${portList.length} 个\n协议: TCP\n\n`;
+            let result = `源: ${getSourceLabel('local')}\n主机: ${host}\n扫描端口: ${portList.length} 个\n协议: TCP\n\n`;
             result += `${'端口'.padEnd(8)}${'服务'.padEnd(12)}状态    延迟\n`;
             result += '-'.repeat(45) + '\n';
 
