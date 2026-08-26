@@ -368,7 +368,9 @@ def port_check():
             'port': port,
             'open': result == 0,
             'latency_ms': elapsed if result == 0 else None,
-            'error': None if result == 0 else f'连接被拒绝或超时 (errno: {result})'
+            'error': None if result == 0 else f'连接被拒绝或超时 (errno: {result})',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     
     except socket.gaierror:
@@ -377,7 +379,9 @@ def port_check():
             'host': host,
             'port': port,
             'open': False,
-            'error': '域名解析失败'
+            'error': '域名解析失败',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     except Exception as e:
         return jsonify({
@@ -385,7 +389,9 @@ def port_check():
             'host': host,
             'port': port,
             'open': False,
-            'error': str(e)
+            'error': str(e),
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
 
 @app.route('/api/http', methods=['POST'])
