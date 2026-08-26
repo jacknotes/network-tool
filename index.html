@@ -689,7 +689,7 @@ qq.com</textarea>
         // ===== DNS 服务器管理（预置 + 自定义，localStorage 持久化）=====
         // 地址以 https:// 开头视为 DoH，由终端本地 fetch 解析；纯 IP 视为传统 DNS，降级由后端解析
         const DEFAULT_DNS_SERVERS = [
-            { name: '阿里 DNS', url: 'https://223.5.5.5/dns-query', builtin: true },
+            { name: '阿里 DNS', url: 'https://223.5.5.5/resolve', builtin: true },
             { name: '腾讯 DNS', url: 'https://1.12.12.12/dns-query', builtin: true },
             { name: 'Google DNS', url: 'https://8.8.8.8/resolve', builtin: true },
             { name: 'Cloudflare', url: 'https://1.1.1.1/dns-query', builtin: true },
@@ -929,10 +929,11 @@ API地址: ${API_SERVER}/api/ping
             endTask('ping');
         }
 
-        // DNS解析 - 通过后端API
+        // DNS解析 - DoH 地址走终端本地 fetch，纯 IP DNS 服务器降级后端
         async function doDns() {
             const domain = document.getElementById('dns-host').value.trim();
             const dnsServer = document.getElementById('dns-server').value;
+            const recordType = document.getElementById('dns-type').value;
             if (!domain) return alert('请输入域名');
 
             startTask('dns');
@@ -945,51 +946,97 @@ API地址: ${API_SERVER}/api/ping
             const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
 
             try {
-                const url = `${API_SERVER}/api/dns`;
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ domain, dns_server: dnsServer, type: 'A' }),
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                    throw new Error(`服务器返回 ${response.status}: ${response.statusText}`);
-                }
-                
-                const contentType = response.headers.get('content-type') || '';
-                if (!contentType.includes('application/json')) {
-                    const text = await response.text();
-                    throw new Error(`API返回了非JSON响应: ${text.substring(0, 100)}`);
-                }
-                
-                const data = await response.json();
+                let records = [];
+                let sourceLine = '';
 
-                if (controller.signal.aborted) {
-                    resultBox.className = 'result-box warning';
-                    resultBox.innerHTML = `⚠ DNS解析已取消`;
-                    addHistory('DNS', domain, '已取消');
-                } else if (data.success && data.records.length > 0) {
+                if (dnsServer.startsWith('https://')) {
+                    // 终端本地 DoH 查询（5 秒超时，联动手动停止）
+                    let dohTimedOut = false;
+                    const dohController = new AbortController();
+                    const dohTimeout = setTimeout(() => { dohTimedOut = true; dohController.abort(); }, 5000);
+                    const onManualAbort = () => dohController.abort();
+                    controller.signal.addEventListener('abort', onManualAbort);
+                    try {
+                        const dohUrl = `${dnsServer}?name=${encodeURIComponent(domain)}&type=${recordType}`;
+                        const response = await fetch(dohUrl, {
+                            headers: { 'Accept': 'application/dns-json' },
+                            signal: dohController.signal
+                        });
+                        clearTimeout(timeoutId);
+                        if (!response.ok) throw new Error(`DoH 服务器返回 ${response.status}: ${response.statusText}`);
+                        const dohData = await response.json();
+                        if (dohData.Status !== 0) throw new Error(`DoH 查询失败 (Status: ${dohData.Status})`);
+                        records = (dohData.Answer || []).map(a => a.data);
+                        sourceLine = `${getSourceLabel('local')} (DoH)`;
+                    } catch (e) {
+                        throw new Error(dohTimedOut
+                            ? 'DoH 查询超时（5s），可切换为纯 IP 的 DNS 服务器走服务器解析'
+                            : `DoH 查询失败: ${e.message}\n可切换为纯 IP 的 DNS 服务器走服务器解析`);
+                    } finally {
+                        clearTimeout(dohTimeout);
+                        controller.signal.removeEventListener('abort', onManualAbort);
+                    }
+                } else {
+                    // 降级：调后端 /api/dns
+                    const url = `${API_SERVER}/api/dns`;
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ domain, dns_server: dnsServer, type: recordType }),
+                        signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (!response.ok) {
+                        throw new Error(`服务器返回 ${response.status}: ${response.statusText}`);
+                    }
+
+                    const contentType = response.headers.get('content-type') || '';
+                    if (!contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`API返回了非JSON响应: ${text.substring(0, 100)}`);
+                    }
+
+                    const data = await response.json();
+
+                    if (controller.signal.aborted) {
+                        resultBox.className = 'result-box warning';
+                        resultBox.innerHTML = `⚠ DNS解析已取消`;
+                        addHistory('DNS', domain, '已取消');
+                        endTask('dns');
+                        return;
+                    }
+                    if (!data.success) {
+                        throw new Error(data.error || '未找到解析记录');
+                    }
+                    records = data.records || [];
+                    sourceLine = `源IP: ${data.source_ip || '未知'}`;
+                }
+
+                if (records.length > 0) {
                     resultBox.className = 'result-box success';
                     let result = `✓ 解析成功
 
+${sourceLine}
 域名: ${domain}
 DNS服务器: ${dnsServer}
+记录类型: ${recordType}
 解析结果:`;
-                    data.records.forEach((record, i) => {
+                    records.forEach((record) => {
                         result += `\n  → ${record}`;
                     });
                     resultBox.innerHTML = result;
-                    addHistory('DNS', domain, `IP: ${data.records[0]}`);
+                    addHistory('DNS', domain, `${recordType}: ${records[0]}`);
                 } else {
                     resultBox.className = 'result-box error';
                     resultBox.innerHTML = `✗ 解析失败
 
+${sourceLine}
 域名: ${domain}
 DNS服务器: ${dnsServer}
-错误: ${data.error || '未找到解析记录'}
+记录类型: ${recordType}
+错误: 未找到解析记录
 状态: 解析失败`;
                     addHistory('DNS', domain, '解析失败');
                 }
@@ -1005,7 +1052,7 @@ DNS服务器: ${dnsServer}
 
 域名: ${domain}
 错误: ${e.message}
-请检查API服务器是否启动: ${API_SERVER}`;
+请检查网络、DoH 地址，或改用纯 IP 的 DNS 服务器走服务器解析`;
                     addHistory('DNS', domain, '请求失败');
                 }
             }
@@ -1663,6 +1710,17 @@ API地址: ${API_SERVER}/api/mtr
 
         // 初始化
         renderDnsServers();
+        // DNS 服务器切换时动态更新测试源 badge：DoH 地址→终端本地（绿），纯 IP→服务器（橙）
+        function updateDnsBadge() {
+            const sel = document.getElementById('dns-server');
+            const badge = document.getElementById('dns-source-badge');
+            if (!sel || !badge) return;
+            const isDoH = (sel.value || '').startsWith('https://');
+            const kind = isDoH ? 'local' : 'server';
+            badge.className = 'source-badge ' + kind;
+            badge.textContent = getSourceLabel(kind);
+        }
+        document.getElementById('dns-server').addEventListener('change', updateDnsBadge);
         // 为各功能 Tab 标题注入测试源 badge（服务器视角橙色 / 终端本地绿色）
         // 走后端的功能：ping/traceroute/mtr/batch/cert；终端本地：dns/http/port/info/whois/tcp-ping；cidr 纯计算无源
         document.querySelectorAll('.section-title').forEach(t => {
@@ -1678,6 +1736,8 @@ API地址: ${API_SERVER}/api/mtr
             badge.textContent = getSourceLabel(kind);
             t.appendChild(badge);
         });
+        // badge 注入完成后，按 DNS 服务器实际选中项校正 DNS badge（DoH→local，纯 IP→server）
+        updateDnsBadge();
         renderHistory();
         refreshInfo();
     </script>
