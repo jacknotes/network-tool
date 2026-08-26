@@ -878,20 +878,26 @@ def mtr():
             'host': host,
             'count': count,
             'hops': hops,
-            'total_hops': len(hops)
+            'total_hops': len(hops),
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     
     except subprocess.TimeoutExpired:
         return jsonify({
             'success': False,
             'error': 'MTR执行超时',
-            'raw_output': ''
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e),
-            'raw_output': ''
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
         })
 
 @app.route('/api/ip', methods=['GET'])
