@@ -338,6 +338,81 @@ def dns_lookup():
             'source_ip': get_local_ip()
         })
 
+@app.route('/api/whois', methods=['POST'])
+@rate_limit_decorator
+@concurrent_limit_decorator
+def whois_lookup():
+    """Whois 域名信息查询"""
+    data = request.get_json()
+    host = data.get('host', '')
+
+    valid, msg = validate_host(host)
+    if not valid:
+        return jsonify({'success': False, 'error': msg}), 400
+
+    try:
+        proc = subprocess.run(['whois', host], capture_output=True, text=True, timeout=15)
+        output = proc.stdout + proc.stderr
+
+        registrar = ''
+        creation_date = ''
+        expiry_date = ''
+        status = ''
+        registrar_match = re.search(r'Registrar:\s*(.+)', output)
+        if registrar_match:
+            registrar = registrar_match.group(1).strip()
+        creation_match = re.search(r'Creation Date:\s*(.+)', output)
+        if creation_match:
+            creation_date = creation_match.group(1).strip()
+        expiry_match = re.search(r'Registry Expiry Date:\s*(.+)', output)
+        if expiry_match:
+            expiry_date = expiry_match.group(1).strip()
+        status_matches = re.findall(r'Domain Status:\s*(\S+)', output)
+        if status_matches:
+            status = ', '.join(status_matches)
+
+        has_info = bool(registrar or creation_date or expiry_date)
+        return jsonify({
+            'success': has_info,
+            'host': host,
+            'registrar': registrar,
+            'creation_date': creation_date,
+            'expiry_date': expiry_date,
+            'status': status,
+            'raw_output': output,
+            'source': 'server',
+            'source_ip': get_local_ip(),
+            'error': None if has_info else '未查询到 Whois 信息（可能是 IP 查询不受支持或查询被限制）'
+        })
+
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'host': host,
+            'error': 'Whois 查询超时',
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
+        })
+    except FileNotFoundError:
+        return jsonify({
+            'success': False,
+            'host': host,
+            'error': '服务器未安装 whois 命令',
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'host': host,
+            'error': str(e),
+            'raw_output': '',
+            'source': 'server',
+            'source_ip': get_local_ip()
+        })
+
 @app.route('/api/port', methods=['POST'])
 @rate_limit_decorator
 @concurrent_limit_decorator

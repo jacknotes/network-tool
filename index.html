@@ -377,6 +377,22 @@
                 <span class="icon">📋</span>
                 批量
             </div>
+            <div class="quick-btn" onclick="showTab('whois')">
+                <span class="icon">📝</span>
+                Whois
+            </div>
+            <div class="quick-btn" onclick="showTab('tcp-ping')">
+                <span class="icon">⏱️</span>
+                TCP
+            </div>
+            <div class="quick-btn" onclick="showTab('cert')">
+                <span class="icon">🔒</span>
+                证书
+            </div>
+            <div class="quick-btn" onclick="showTab('cidr')">
+                <span class="icon">🧮</span>
+                CIDR
+            </div>
         </div>
 
         <div class="tabs">
@@ -597,6 +613,26 @@ qq.com</textarea>
                     <button class="btn btn-stop" id="batch-stop-btn" onclick="stopTask('batch')">停止</button>
                 </div>
                 <div id="batch-result" class="result-box info" style="display:none"></div>
+            </div>
+        </div>
+
+        <!-- Whois 查询 -->
+        <div id="whois-content" class="tab-content">
+            <div class="section">
+                <div class="section-title">
+                    <span class="icon">📝</span>
+                    Whois 域名信息
+                    <span class="timeout-badge">超时 30s</span>
+                </div>
+                <div class="input-group">
+                    <label>域名（终端本地走 RDAP 查询，失败降级服务器 whois）</label>
+                    <input type="text" id="whois-host" placeholder="例如: baidu.com" value="baidu.com">
+                </div>
+                <div class="btn-row">
+                    <button class="btn" id="whois-start-btn" onclick="doWhois()">查询信息</button>
+                    <button class="btn btn-stop" id="whois-stop-btn" onclick="stopTask('whois')">停止</button>
+                </div>
+                <div id="whois-result" class="result-box info" style="display:none"></div>
             </div>
         </div>
 
@@ -1636,6 +1672,137 @@ API地址: ${API_SERVER}/api/mtr
                 }
             }
             endTask('batch');
+        }
+
+        // Whois 查询 - 终端本地 RDAP 优先，失败或 IP 输入时降级后端 whois
+        async function doWhois() {
+            const host = document.getElementById('whois-host').value.trim();
+            if (!host) return alert('请输入域名或IP');
+
+            const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(host);
+
+            startTask('whois');
+            const resultBox = document.getElementById('whois-result');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box info';
+            resultBox.innerHTML = '<span class="loading"></span>正在查询...';
+
+            const controller = abortControllers['whois'];
+            const updateWhoisBadge = (kind) => {
+                const badge = document.getElementById('whois-source-badge');
+                if (badge) {
+                    badge.className = 'source-badge ' + kind;
+                    badge.textContent = getSourceLabel(kind);
+                }
+            };
+
+            try {
+                let lines = [];
+
+                if (!isIp) {
+                    // 尝试终端本地 RDAP
+                    let rdapTimedOut = false;
+                    const rdapController = new AbortController();
+                    const rdapTimeout = setTimeout(() => { rdapTimedOut = true; rdapController.abort(); }, 8000);
+                    const onManualAbort = () => rdapController.abort();
+                    controller.signal.addEventListener('abort', onManualAbort);
+                    try {
+                        const response = await fetch(`https://rdap.org/domain/${encodeURIComponent(host)}`, {
+                            headers: { 'Accept': 'application/rdap+json' },
+                            signal: rdapController.signal
+                        });
+                        if (!response.ok) throw new Error(`RDAP 返回 ${response.status}`);
+                        const rdap = await response.json();
+                        // 解析注册日期/到期日期
+                        const ev = {};
+                        (rdap.events || []).forEach(e => { if (e.eventAction && e.eventDate) ev[e.eventAction] = e.eventDate; });
+                        // 解析注册商（roles 含 registrar 的 entity 的 vcard fn）
+                        let registrar = '';
+                        const findRegistrar = (entities) => {
+                            for (const ent of entities || []) {
+                                if ((ent.roles || []).includes('registrar')) {
+                                    const vcard = ent.vcardArray && ent.vcardArray[1];
+                                    if (Array.isArray(vcard)) {
+                                        const fn = vcard.find(v => v[0] === 'fn');
+                                        if (fn) return fn[3];
+                                    }
+                                }
+                                const nested = findRegistrar(ent.entities);
+                                if (nested) return nested;
+                            }
+                            return '';
+                        };
+                        registrar = findRegistrar(rdap.entities);
+                        lines.push(`✓ 查询成功`);
+                        lines.push(`源: ${getSourceLabel('local')} (RDAP)`);
+                        lines.push(`域名: ${host}`);
+                        if (registrar) lines.push(`注册商: ${registrar}`);
+                        if (ev.registration) lines.push(`注册时间: ${ev.registration}`);
+                        if (ev.expiration) lines.push(`到期时间: ${ev.expiration}`);
+                        if (ev['last changed']) lines.push(`更新时间: ${ev['last changed']}`);
+                        if (Array.isArray(rdap.status) && rdap.status.length) lines.push(`状态: ${rdap.status.join(', ')}`);
+                        updateWhoisBadge('local');
+                        resultBox.className = 'result-box success';
+                        resultBox.innerHTML = lines.join('\n');
+                        addHistory('Whois', host, registrar || '查询成功');
+                        endTask('whois');
+                        return;
+                    } catch (e) {
+                        if (controller.signal.aborted) throw e;
+                        // RDAP 失败，降级后端
+                    } finally {
+                        clearTimeout(rdapTimeout);
+                        controller.signal.removeEventListener('abort', onManualAbort);
+                    }
+                }
+
+                // 降级：调后端 /api/whois
+                const response = await fetch(`${API_SERVER}/api/whois`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ host }),
+                    signal: controller.signal
+                });
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error || `服务器返回 ${response.status}`);
+                }
+                const data = await response.json();
+
+                if (data.success) {
+                    lines.push(`✓ 查询成功`);
+                    lines.push(`源IP: ${data.source_ip || '未知'}`);
+                    lines.push(`域名: ${host}`);
+                    if (data.registrar) lines.push(`注册商: ${data.registrar}`);
+                    if (data.creation_date) lines.push(`注册时间: ${data.creation_date}`);
+                    if (data.expiry_date) lines.push(`到期时间: ${data.expiry_date}`);
+                    if (data.status) lines.push(`状态: ${data.status}`);
+                    if (data.raw_output && !data.registrar) {
+                        lines.push(`\n原始输出:\n${data.raw_output.substring(0, 1500)}`);
+                    }
+                    updateWhoisBadge('server');
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = lines.join('\n');
+                    addHistory('Whois', host, data.registrar || '查询成功');
+                } else {
+                    throw new Error(data.error || '未查询到 Whois 信息');
+                }
+            } catch (e) {
+                if (e.name === 'AbortError') {
+                    resultBox.className = 'result-box warning';
+                    resultBox.innerHTML = `⚠ 查询已取消`;
+                    addHistory('Whois', host, '已取消');
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `✗ 查询失败
+
+域名: ${host}
+错误: ${e.message}
+提示: RDAP 与后端 whois 均未成功，请检查网络或后端配置`;
+                    addHistory('Whois', host, '查询失败');
+                }
+            }
+            endTask('whois');
         }
 
         // 设置API服务器
