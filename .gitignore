@@ -18,6 +18,13 @@ server.log
 # APK构建产物
 *.apk
 
+# 签名密钥与凭据（严禁提交到仓库！）
+# 真实 keystore 与 release-signing.properties 含私钥与密码，绝不能提交
+signing/
+*.keystore
+*.jks
+release-signing.properties
+
 # Node.js
 node_modules/
 npm-debug.log*
