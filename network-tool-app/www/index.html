@@ -599,7 +599,7 @@
                     <span class="timeout-badge">超时 30s</span>
                 </div>
                 <div class="input-group">
-                    <label>主机列表（每行一个）</label>
+                    <label>主机列表（每行一个，最多 100 台）</label>
                     <textarea id="batch-hosts" style="width:100%;height:120px;padding:12px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:14px;resize:none;outline:none;" placeholder="baidu.com&#10;google.com&#10;github.com">baidu.com
 google.com
 github.com
@@ -1673,6 +1673,7 @@ API地址: ${API_SERVER}/api/mtr
             if (!hostsText) return alert('请输入主机列表');
 
             const hosts = hostsText.split('\n').map(h => h.trim()).filter(h => h);
+            if (hosts.length > 100) return alert('单次检测不能超过100个主机，请减少主机数量');
 
             startTask('batch');
             const resultBox = document.getElementById('batch-result');

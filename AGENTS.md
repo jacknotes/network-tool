@@ -166,7 +166,7 @@ cordova build android --release  # Release 未签名
 | `/api/mtr` | POST | 否 | Windows 用 `tracert` 模拟，Linux 优先 `mtr --json` |
 | `/api/port` | POST | 否 | `port` 1-65535，`timeout` 默认 5 |
 | `/api/http` | POST | 否 | `verify=False`，跟随重定向 |
-| `/api/batch_ping` | POST | 否 | `hosts` 上限 10 |
+| `/api/batch_ping` | POST | 否 | `hosts` 上限 100 |
 | `/api/ip` | GET | 否 | 多源回退：ip-api → ipinfo |
 | `/api/whois` | POST | 否 | 前端优先终端本地 RDAP（rdap.org），失败或 IP 输入时降级后端 `whois` 命令 |
 | `/api/cert` | POST | 否 | 后端 `openssl s_client \| x509` 管道，返回 subject/issuer/日期/SAN/days_left |

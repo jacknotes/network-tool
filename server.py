@@ -659,8 +659,8 @@ def batch_ping():
     if not hosts:
         return jsonify({'success': False, 'error': '请提供主机列表'}), 400
     
-    if len(hosts) > 10:
-        return jsonify({'success': False, 'error': '单次检测不能超过10个主机'}), 400
+    if len(hosts) > 100:
+        return jsonify({'success': False, 'error': '单次检测不能超过100个主机'}), 400
     
     # 验证所有主机
     for host in hosts:
