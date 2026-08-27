@@ -298,7 +298,27 @@ network-tool/
 
 ## 快速开始
 
-### 后端服务（必需）
+### Docker 一键运行（推荐）
+
+官方镜像已发布到 Docker Hub，拉取即可运行（内部已内置 pip 依赖与所有系统命令工具）：
+
+```bash
+# 拉取镜像并启动（默认监听 0.0.0.0:8080）
+docker run -d --name network-tool --restart unless-stopped -p 8080:8080 jacknotes/network-tool:v3.0.0
+```
+
+启动成功后浏览器访问：
+
+```
+本机访问: http://localhost:8080
+手机访问: http://192.168.x.x:8080
+```
+
+如需用 `docker compose`，可参考 [`docs/DEPLOY.md`](docs/DEPLOY.md) 中的示例配置。
+
+---
+
+### 后端服务（从源码运行）
 
 ```bash
 # 1. 安装依赖
