@@ -1,0 +1,15 @@
+# 构建上下文排除项 —— 避免把无关/体积大的内容打进镜像
+.git
+.gitignore
+docs/
+network-tool-app/
+signing/
+*.apk
+*.keystore
+*.jks
+node_modules/
+__pycache__/
+*.pyc
+server.log
+docker-compose.yml
+Dockerfile

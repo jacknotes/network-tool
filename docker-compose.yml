@@ -1,0 +1,11 @@
+services:
+  network-tool:
+    build:
+      context: .
+      # 若服务器需经本机代理(127.0.0.1:10809)才能访问外网，构建须用 host 网络，否则 apt/pip 超时
+      network: host
+    image: network-tool:3.0.0
+    container_name: network-tool
+    restart: unless-stopped
+    ports:
+      - "8080:8080"

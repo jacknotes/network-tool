@@ -175,32 +175,51 @@ sudo systemctl start network-tool
 APK 首次打开时配置新的服务器地址即可，或：
 - 点击 ⚙️ 图标 → 修改服务器地址 → 保存
 
-### 迁移到 Docker（可选）
+### 迁移到 Docker（推荐）
 
-```dockerfile
-FROM python:3.11-slim
-
-RUN apt-get update && apt-get install -y \
-mtr traceroute iputils-ping dnsutils whois openssl \
-&& rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-COPY . .
-
-RUN pip install flask flask-cors requests
-
-EXPOSE 8080
-
-CMD ["python3", "server.py"]
-```
+仓库根目录已提供生产可用的 `Dockerfile`、`docker-compose.yml` 与 `.dockerignore`。
 
 ```bash
-# 构建
-docker build -t network-tool .
+# 构建镜像
+docker build -t network-tool:3.0.0 .
 
-# 运行
-docker run -d -p 8080:8080 --name network-tool network-tool
+# 运行（映射 8080，失败自动重启）
+docker run -d --name network-tool --restart unless-stopped \
+  -p 8080:8080 network-tool:3.0.0
+
+# 或使用 docker compose（推荐，便于管理）
+docker compose up -d
 ```
+
+> **重要：构建须带 `--network=host`**
+> 若服务器通过本机代理（如 `127.0.0.1:10809` 的 xray/v2ray）才能访问外网，
+> 构建时容器内默认网络访问不到宿主机代理，会导致 `apt-get`/`pip` 超时：
+> ```bash
+> docker build --network=host -t network-tool:3.0.0 .
+> ```
+> 如果走的是透明代理/直连外网，则无需此参数。
+
+**访问：** `http://localhost:8080`（服务与前端由 Flask 单进程托管）。
+
+#### 镜像内容说明
+
+- 基于 `python:3.11-slim`，内置 `iputils-ping / traceroute / mtr / dnsutils / whois / openssl / curl`，对应 `server.py` 的全部系统命令依赖。
+- 为加速构建（国内网络），`Dockerfile` 已将 **Debian 源换成腾讯云镜像**、**pip 源换成阿里云镜像**。若你在海外/无代理环境，可去掉这两个镜像切换。
+- 仅打包 `server.py + index.html + manifest.json`（前端为自包含单文件），`.gitignore`/`.dockerignore` 已排除密钥、构建产物、Cordova 工程等。
+
+#### 常用运维命令
+
+```bash
+docker ps                        # 查看容器状态
+docker logs -f network-tool       # 实时日志
+docker restart network-tool       # 重启
+docker rm -f network-tool         # 删除容器
+docker compose up -d              # 用 compose 重建并运行
+docker compose down               # 停止并移除
+```
+
+> 若替换旧版本：旧版本可能直接以 `python3 server.py` 后台进程运行并占用 8080。
+> 迁移前先停掉旧进程释放端口：`kill <旧PID>` 或 `pkill -f server.py`，再启动容器。
 
 ## 五、网络配置
 
