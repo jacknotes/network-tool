@@ -1488,7 +1488,7 @@ API地址: ${API_SERVER}/api/mtr
             };
 
             const startTime = performance.now();
-            let result = `${getSourceLabel('local')}\n主机: ${host}\n扫描端口: ${portList.length} 个\n协议: TCP\n\n`;
+            let result = `${getSourceLabel('server')}\n主机: ${host}\n扫描端口: ${portList.length} 个\n协议: TCP\n\n`;
             result += `${'端口'.padEnd(8)}${'服务'.padEnd(12)}状态    延迟\n`;
             result += '-'.repeat(45) + '\n';
 
@@ -2211,13 +2211,13 @@ API地址: ${API_SERVER}/api/mtr
         }
         document.getElementById('dns-server').addEventListener('change', updateDnsBadge);
         // 为各功能 Tab 标题注入测试源 badge（服务器视角橙色 / 终端本地绿色）
-        // 走后端的功能：ping/traceroute/mtr/batch/cert；终端本地：dns/http/port/info/whois/tcp-ping；cidr 纯计算无源
+        // 走后端的功能：ping/traceroute/mtr/port/batch/cert；终端本地：dns/http/info/whois/tcp-ping；cidr 纯计算无源
         document.querySelectorAll('.section-title').forEach(t => {
             const content = t.closest('.tab-content');
             if (!content) return;
             const id = content.id.replace('-content', '');
             if (id === 'cidr') return;
-            const serverKinds = ['ping', 'traceroute', 'mtr', 'batch', 'cert'];
+            const serverKinds = ['ping', 'traceroute', 'mtr', 'port', 'batch', 'cert'];
             const kind = serverKinds.includes(id) ? 'server' : 'local';
             const badge = document.createElement('span');
             badge.className = 'source-badge ' + kind;
