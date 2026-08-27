@@ -650,6 +650,10 @@ qq.com</textarea>
                     <label>测量轮数</label>
                     <input type="number" id="tcp-ping-rounds" placeholder="默认 5 轮" value="5" min="1" max="10">
                 </div>
+                <div class="input-group">
+                    <label>单轮超时（秒，1-10）</label>
+                    <input type="number" id="tcp-ping-timeout" placeholder="默认 3 秒" value="3" min="1" max="10">
+                </div>
                 <div class="btn-row">
                     <button class="btn" id="tcp-ping-start-btn" onclick="doTcpPing()">开始测量</button>
                     <button class="btn btn-stop" id="tcp-ping-stop-btn" onclick="stopTask('tcp-ping')">停止</button>
@@ -1874,11 +1878,42 @@ API地址: ${API_SERVER}/api/mtr
             endTask('whois');
         }
 
-        // TCP Ping - \u7eaf\u524d\u7aef\u672c\u5730\u6d4b\u91cf\uff08fetch no-cors \u8ba1\u65f6\uff0c\u591a\u8f6e + min/avg/max\uff09
+        // TCP Ping - \u7ec8\u7aef\u672c\u5730\u6d4b\u91cf\uff08Image \u63a2\u6d4b + \u5355\u8f6e\u8d85\u65f6\uff0c\u591a\u8f6e + min/avg/max\uff09
+        // \u7528 Image() \u63a2\u6d4b\u66ff\u4ee3 fetch(no-cors)\uff1aonload/onerror \u90fd\u8bf4\u660e TCP \u63e1\u624b\u6709\u54cd\u5e94\uff08\u7aef\u53e3\u5f00\u653e\u6216\u88ab RST\uff09\uff0c
+        // \u53ea\u6709\u5355\u8f6e\u8d85\u65f6\uff08\u9632\u706b\u5899\u9759\u9ed8\u4e22\u5305 / \u7aef\u53e3\u8fc7\u6ee4\uff09\u624d\u5224\u5931\u8d25\uff0c\u907f\u514d fetch \u6302\u8d77\u5bfc\u81f4\u6574\u4f53\u5361\u6b7b
+        function tcpProbe(host, port, timeoutMs, outerSignal) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                const url = `${port === 443 ? 'https' : 'http'}://${host}:${port}/?_=${Date.now()}_${Math.random()}`;
+                let settled = false;
+                let timer = null;
+                const onDone = (ok) => {
+                    if (settled) return;
+                    settled = true;
+                    if (timer) clearTimeout(timer);
+                    img.onload = null;
+                    img.onerror = null;
+                    img.src = ''; // \u53d6\u6d88\u6302\u8d77\u7684\u8bf7\u6c42
+                    resolve({ ok, elapsed: Math.round(performance.now() - start) });
+                };
+                const start = performance.now();
+                img.onload = () => onDone(true);
+                img.onerror = () => onDone(true); // RST/4xx \u4e5f\u7b97 TCP \u8fde\u901a
+                timer = setTimeout(() => onDone(false), timeoutMs);
+                img.src = url;
+                // \u5916\u90e8\u624b\u52a8\u505c\u6b62\u65f6\u7acb\u5373\u7ed3\u675f\u672c\u8f6e
+                if (outerSignal) {
+                    if (outerSignal.aborted) onDone(false);
+                    else outerSignal.addEventListener('abort', () => onDone(false), { once: true });
+                }
+            });
+        }
+
         async function doTcpPing() {
             const host = document.getElementById('tcp-ping-host').value.trim();
             const port = parseInt(document.getElementById('tcp-ping-port').value, 10);
             const rounds = Math.min(Math.max(parseInt(document.getElementById('tcp-ping-rounds').value, 10) || 5, 1), 10);
+            const timeoutSec = Math.min(Math.max(parseInt(document.getElementById('tcp-ping-timeout').value, 10) || 3, 1), 10);
             if (!host) return alert('\u8bf7\u8f93\u5165\u4e3b\u673a');
             if (!port || port < 1 || port > 65535) return alert('\u7aef\u53e3\u8303\u56f4 1-65535');
 
@@ -1892,29 +1927,17 @@ API地址: ${API_SERVER}/api/mtr
             const protocol = port === 443 ? 'https' : 'http';
 
             try {
-                let lines = [getSourceLabel('local'), '\u4e3b\u673a: ' + host, '\u7aef\u53e3: ' + port, '\u534f\u8bae: ' + protocol, '', '\u8f6e\u6b21    \u5ef6\u8fdf(ms)   \u7ed3\u679c', '-'.repeat(30)];
+                let lines = [getSourceLabel('local'), '\u4e3b\u673a: ' + host, '\u7aef\u53e3: ' + port, '\u534f\u8bae: ' + protocol, '\u5355\u8f6e\u8d85\u65f6: ' + timeoutSec + 's', '', '\u8f6e\u6b21    \u5ef6\u8fdf(ms)   \u7ed3\u679c', '-'.repeat(30)];
                 const latencies = [];
-                let dnsFailed = false;
+                const failures = []; // 'timeout' | 'error'
 
                 for (let i = 1; i <= rounds; i++) {
                     if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-                    const start = performance.now();
-                    let reachable = false;
-                    try {
-                        await fetch(`${protocol}://${host}:${port}/?_=${Date.now()}`, {
-                            mode: 'no-cors',
-                            cache: 'no-store',
-                            signal: controller.signal
-                        });
-                        reachable = true; // opaque \u54cd\u5e94\u89c6\u4e3a\u8fde\u901a
-                    } catch (e) {
-                        if (e.name === 'AbortError') throw e;
-                        // TypeError: DNS \u5931\u8d25\u6216\u8fde\u63a5\u88ab\u62d2\uff0c\u7edf\u4e00\u6807\u8bb0
-                        dnsFailed = true;
-                    }
-                    const elapsed = Math.round(performance.now() - start);
-                    if (reachable) latencies.push(elapsed);
-                    lines.push(String(i).padEnd(8) + (reachable ? String(elapsed).padEnd(10) : '').padEnd(0) + (reachable ? ' : \u2713 \u8fde\u901a' : ' : \u2717 \u5931\u8d25'));
+                    const probe = await tcpProbe(host, port, timeoutSec * 1000, controller.signal);
+                    if (probe.ok) latencies.push(probe.elapsed);
+                    else failures.push('timeout');
+                    const elapsedStr = probe.ok ? String(probe.elapsed).padEnd(10) : '\u8d85\u65f6'.padEnd(10);
+                    lines.push(String(i).padEnd(8) + elapsedStr + (probe.ok ? ' : \u2713 \u8fde\u901a' : ' : \u2717 \u5931\u8d25'));
                     resultBox.innerHTML = lines.join('\n');
                     if (i < rounds && !controller.signal.aborted) {
                         await new Promise(r => setTimeout(r, 1000));
@@ -1928,12 +1951,12 @@ API地址: ${API_SERVER}/api/mtr
                     lines.push('', '-'.repeat(30));
                     lines.push(`\u8fde\u901a: ${latencies.length}/${rounds} \u8f6e`);
                     lines.push(`\u6700\u5c0f: ${min}ms | \u5e73\u5747: ${avg}ms | \u6700\u5927: ${max}ms`);
-                    if (dnsFailed) lines.push(`\u63d0\u793a: ${rounds - latencies.length} \u8f6e\u5931\u8d25\uff08\u57df\u540d\u89e3\u6790\u5931\u8d25\u6216\u7aef\u53e3\u672a\u5f00\u653e\uff09`);
+                    if (failures.length > 0) lines.push(`\u63d0\u793a: ${failures.length} \u8f6e\u8d85\u65f6\uff08\u7aef\u53e3\u88ab\u8fc7\u6ee4/\u9632\u706b\u5899\u4e22\u5305/\u57df\u540d\u89e3\u6790\u5931\u8d25\uff09`);
                     resultBox.className = 'result-box success';
                     resultBox.innerHTML = lines.join('\n');
                     addHistory('TCP Ping', `${host}:${port}`, `\u5e73\u5747 ${avg}ms`);
                 } else {
-                    lines.push('', '\u5168\u90e8\u8f6e\u6b21\u5931\u8d25\uff1a\u57df\u540d\u89e3\u6790\u5931\u8d25\u6216\u7aef\u53e3\u672a\u5f00\u653e');
+                    lines.push('', '\u5168\u90e8\u8f6e\u6b21\u5931\u8d25\uff1a\u7aef\u53e3\u88ab\u8fc7\u6ee4/\u9632\u706b\u5899\u9759\u9ed8\u4e22\u5305/\u57df\u540d\u89e3\u6790\u5931\u8d25');
                     resultBox.className = 'result-box error';
                     resultBox.innerHTML = lines.join('\n');
                     addHistory('TCP Ping', `${host}:${port}`, '\u8fde\u63a5\u5931\u8d25');

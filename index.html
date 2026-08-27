@@ -650,6 +650,10 @@ qq.com</textarea>
                     <label>测量轮数</label>
                     <input type="number" id="tcp-ping-rounds" placeholder="默认 5 轮" value="5" min="1" max="10">
                 </div>
+                <div class="input-group">
+                    <label>单轮超时（秒，1-10）</label>
+                    <input type="number" id="tcp-ping-timeout" placeholder="默认 3 秒" value="3" min="1" max="10">
+                </div>
                 <div class="btn-row">
                     <button class="btn" id="tcp-ping-start-btn" onclick="doTcpPing()">开始测量</button>
                     <button class="btn btn-stop" id="tcp-ping-stop-btn" onclick="stopTask('tcp-ping')">停止</button>
@@ -1874,47 +1878,66 @@ API地址: ${API_SERVER}/api/mtr
             endTask('whois');
         }
 
-        // TCP Ping - \u7eaf\u524d\u7aef\u672c\u5730\u6d4b\u91cf\uff08fetch no-cors \u8ba1\u65f6\uff0c\u591a\u8f6e + min/avg/max\uff09
+        // TCP Ping - 终端本地测量（Image 探测 + 单轮超时，多轮 + min/avg/max）
+        // 用 Image() 探测替代 fetch(no-cors)：onload/onerror 都说明 TCP 握手有响应（端口开放或被 RST），
+        // 只有单轮超时（防火墙静默丢包 / 端口过滤）才判失败，避免 fetch 挂起导致整体卡死
+        function tcpProbe(host, port, timeoutMs, outerSignal) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                const url = `${port === 443 ? 'https' : 'http'}://${host}:${port}/?_=${Date.now()}_${Math.random()}`;
+                let settled = false;
+                let timer = null;
+                const onDone = (ok) => {
+                    if (settled) return;
+                    settled = true;
+                    if (timer) clearTimeout(timer);
+                    img.onload = null;
+                    img.onerror = null;
+                    img.src = ''; // 取消挂起的请求
+                    resolve({ ok, elapsed: Math.round(performance.now() - start) });
+                };
+                const start = performance.now();
+                img.onload = () => onDone(true);
+                img.onerror = () => onDone(true); // RST/4xx 也算 TCP 连通
+                timer = setTimeout(() => onDone(false), timeoutMs);
+                img.src = url;
+                // 外部手动停止时立即结束本轮
+                if (outerSignal) {
+                    if (outerSignal.aborted) onDone(false);
+                    else outerSignal.addEventListener('abort', () => onDone(false), { once: true });
+                }
+            });
+        }
+
         async function doTcpPing() {
             const host = document.getElementById('tcp-ping-host').value.trim();
             const port = parseInt(document.getElementById('tcp-ping-port').value, 10);
             const rounds = Math.min(Math.max(parseInt(document.getElementById('tcp-ping-rounds').value, 10) || 5, 1), 10);
-            if (!host) return alert('\u8bf7\u8f93\u5165\u4e3b\u673a');
-            if (!port || port < 1 || port > 65535) return alert('\u7aef\u53e3\u8303\u56f4 1-65535');
+            const timeoutSec = Math.min(Math.max(parseInt(document.getElementById('tcp-ping-timeout').value, 10) || 3, 1), 10);
+            if (!host) return alert('请输入主机');
+            if (!port || port < 1 || port > 65535) return alert('端口范围 1-65535');
 
             startTask('tcp-ping');
             const resultBox = document.getElementById('tcp-ping-result');
             resultBox.style.display = 'block';
             resultBox.className = 'result-box info';
-            resultBox.innerHTML = '<span class="loading"></span>\u6b63\u5728\u6d4b\u91cf...';
+            resultBox.innerHTML = '<span class="loading"></span>正在测量...';
 
             const controller = abortControllers['tcp-ping'];
             const protocol = port === 443 ? 'https' : 'http';
 
             try {
-                let lines = [getSourceLabel('local'), '\u4e3b\u673a: ' + host, '\u7aef\u53e3: ' + port, '\u534f\u8bae: ' + protocol, '', '\u8f6e\u6b21    \u5ef6\u8fdf(ms)   \u7ed3\u679c', '-'.repeat(30)];
+                let lines = [getSourceLabel('local'), '主机: ' + host, '端口: ' + port, '协议: ' + protocol, '单轮超时: ' + timeoutSec + 's', '', '轮次    延迟(ms)   结果', '-'.repeat(30)];
                 const latencies = [];
-                let dnsFailed = false;
+                const failures = []; // 'timeout' | 'error'
 
                 for (let i = 1; i <= rounds; i++) {
                     if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-                    const start = performance.now();
-                    let reachable = false;
-                    try {
-                        await fetch(`${protocol}://${host}:${port}/?_=${Date.now()}`, {
-                            mode: 'no-cors',
-                            cache: 'no-store',
-                            signal: controller.signal
-                        });
-                        reachable = true; // opaque \u54cd\u5e94\u89c6\u4e3a\u8fde\u901a
-                    } catch (e) {
-                        if (e.name === 'AbortError') throw e;
-                        // TypeError: DNS \u5931\u8d25\u6216\u8fde\u63a5\u88ab\u62d2\uff0c\u7edf\u4e00\u6807\u8bb0
-                        dnsFailed = true;
-                    }
-                    const elapsed = Math.round(performance.now() - start);
-                    if (reachable) latencies.push(elapsed);
-                    lines.push(String(i).padEnd(8) + (reachable ? String(elapsed).padEnd(10) : '').padEnd(0) + (reachable ? ' : \u2713 \u8fde\u901a' : ' : \u2717 \u5931\u8d25'));
+                    const probe = await tcpProbe(host, port, timeoutSec * 1000, controller.signal);
+                    if (probe.ok) latencies.push(probe.elapsed);
+                    else failures.push('timeout');
+                    const elapsedStr = probe.ok ? String(probe.elapsed).padEnd(10) : '超时'.padEnd(10);
+                    lines.push(String(i).padEnd(8) + elapsedStr + (probe.ok ? ' : ✓ 连通' : ' : ✗ 失败'));
                     resultBox.innerHTML = lines.join('\n');
                     if (i < rounds && !controller.signal.aborted) {
                         await new Promise(r => setTimeout(r, 1000));
@@ -1926,30 +1949,30 @@ API地址: ${API_SERVER}/api/mtr
                     const max = Math.max(...latencies);
                     const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
                     lines.push('', '-'.repeat(30));
-                    lines.push(`\u8fde\u901a: ${latencies.length}/${rounds} \u8f6e`);
-                    lines.push(`\u6700\u5c0f: ${min}ms | \u5e73\u5747: ${avg}ms | \u6700\u5927: ${max}ms`);
-                    if (dnsFailed) lines.push(`\u63d0\u793a: ${rounds - latencies.length} \u8f6e\u5931\u8d25\uff08\u57df\u540d\u89e3\u6790\u5931\u8d25\u6216\u7aef\u53e3\u672a\u5f00\u653e\uff09`);
+                    lines.push(`连通: ${latencies.length}/${rounds} 轮`);
+                    lines.push(`最小: ${min}ms | 平均: ${avg}ms | 最大: ${max}ms`);
+                    if (failures.length > 0) lines.push(`提示: ${failures.length} 轮超时（端口被过滤/防火墙丢包/域名解析失败）`);
                     resultBox.className = 'result-box success';
                     resultBox.innerHTML = lines.join('\n');
-                    addHistory('TCP Ping', `${host}:${port}`, `\u5e73\u5747 ${avg}ms`);
+                    addHistory('TCP Ping', `${host}:${port}`, `平均 ${avg}ms`);
                 } else {
-                    lines.push('', '\u5168\u90e8\u8f6e\u6b21\u5931\u8d25\uff1a\u57df\u540d\u89e3\u6790\u5931\u8d25\u6216\u7aef\u53e3\u672a\u5f00\u653e');
+                    lines.push('', '全部轮次失败：端口被过滤/防火墙静默丢包/域名解析失败');
                     resultBox.className = 'result-box error';
                     resultBox.innerHTML = lines.join('\n');
-                    addHistory('TCP Ping', `${host}:${port}`, '\u8fde\u63a5\u5931\u8d25');
+                    addHistory('TCP Ping', `${host}:${port}`, '连接失败');
                 }
             } catch (e) {
                 if (e.name === 'AbortError') {
                     resultBox.className = 'result-box warning';
-                    resultBox.innerHTML = '\u26a0 TCP Ping \u5df2\u53d6\u6d88';
-                    addHistory('TCP Ping', `${host}:${port}`, '\u5df2\u53d6\u6d88');
+                    resultBox.innerHTML = '⚠ TCP Ping 已取消';
+                    addHistory('TCP Ping', `${host}:${port}`, '已取消');
                 } else {
                     resultBox.className = 'result-box error';
-                    resultBox.innerHTML = `\u2717 \u6d4b\u91cf\u5931\u8d25
+                    resultBox.innerHTML = `✗ 测量失败
 
-\u4e3b\u673a: ${host}:${port}
-\u9519\u8bef: ${e.message}`;
-                    addHistory('TCP Ping', `${host}:${port}`, '\u6d4b\u91cf\u5931\u8d25');
+主机: ${host}:${port}
+错误: ${e.message}`;
+                    addHistory('TCP Ping', `${host}:${port}`, '测量失败');
                 }
             }
             endTask('tcp-ping');
