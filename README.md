@@ -372,13 +372,13 @@ python3 server.py
 
 ### 技术栈
 - 纯 HTML / CSS / JavaScript，无框架依赖
-- 单文件 `index.html`（约 1570 行），样式与脚本内联
+- 单文件 `index.html`（约 2055 行），样式与脚本内联
 - 响应式布局，深色主题，触摸优化
 
 ### 主要功能模块
 
-1. **快速操作区** - 8 个功能入口按钮（Ping / 路由 / MTR / DNS / HTTP / 端口 / 本机 / 批量）
-2. **标签页切换** - Ping / 路由 / MTR / DNS / HTTP / 本机（端口与批量通过快速操作区进入）
+1. **快速操作区** - 12 个功能入口按钮，按测试源分组：服务器视角（Ping / 批量 / 路由 / MTR / 端口 / DNS / 证书 / Whois）、终端本地（TCP / HTTP / 本机 / CIDR）
+2. **标签页切换** - 每个功能均为独立标签页，可实时切换（Ping / 批量 / 路由 / MTR / 端口 / DNS / 证书 / Whois / TCP / HTTP / 本机 / CIDR）
 3. **结果展示** - 等宽字体，支持 `success` / `error` / `info` / `warning` 四种样式
 4. **任务控制** - 每个功能 Tab 配备「开始 / 停止」按钮，基于 `AbortController` 取消
 5. **历史记录** - `localStorage` 存储最近 20 条检测记录，可清空

@@ -17,7 +17,7 @@
 ```
 network-tool/
 ├── server.py                  # 后端：Flask 单文件，API + 静态托管（PC 端入口）
-├── index.html                 # PC 前端：单文件，含全部 CSS/JS（约 1570 行）
+├── index.html                 # PC 前端：单文件，含全部 CSS/JS（约 2055 行）
 ├── manifest.json              # PC 端 PWA 配置
 ├── AGENTS.md                  # 本文件
 ├── network-tool-app/          # Cordova Android 项目
