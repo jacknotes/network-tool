@@ -4,6 +4,8 @@
 >
 > 一个面向 IT 运维人员的轻量网络诊断工具，支持 **PC 端网页访问**与 **Android APK 安装使用**两种形态，后端为 Python Flask，前端为原生 HTML/CSS/JS（无框架依赖），移动端通过 Apache Cordova 打包。
 
+![网络诊断工具界面预览](images/network-tool.png)
+
 ## 功能特性
 
 - **Ping 检测** - ICMP 连通性测试，返回丢包率与最小/平均/最大延迟
